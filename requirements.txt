@@ -1,0 +1,16 @@
+av
+fire
+joblib
+Pillow
+scikit-learn
+six
+termcolor
+typing_extensions
+tensorboard
+opencv-python
+matplotlib
+librosa
+panns-inference
+torch
+torchaudio
+torchvision
