@@ -35,24 +35,31 @@ def load_spectrogram(path, dur=3.):
     spectrogram = np.log(spectrogram + 1e-7)
     return spectrogram
 
+
 def load_all_bboxes(annotation_dir, format='flickr'):
     gt_bboxes = {}
+    gt_bboxes_dert = {}
     if format == 'flickr':
         anno_files = os.listdir(annotation_dir)
         for filename in anno_files:
             file = filename.split('.')[0]
             gt = ET.parse(f"{annotation_dir}/{filename}").getroot()
             bboxes = []
+            dert_bboxes = []
             for child in gt:
                 for childs in child:
                     bbox = []
+                    dert_bbox = []
                     if childs.tag == 'bbox':
                         for index, ch in enumerate(childs):
                             if index == 0:
                                 continue
-                            bbox.append(int(224 * int(ch.text)/256))
+                            bbox.append(int(224 * int(ch.text) / 256))
+                            dert_bbox.append(int(800 * int(ch.text) / 256))
                     bboxes.append(bbox)
+                    dert_bboxes.append(dert_bbox)
             gt_bboxes[file] = bboxes
+            gt_bboxes_dert[file] = dert_bboxes
 
     elif format == 'vggss':
         with open('metadata/vggss.json') as json_file:
@@ -60,31 +67,42 @@ def load_all_bboxes(annotation_dir, format='flickr'):
         for annotation in annotations:
             bboxes = [(np.clip(np.array(bbox), 0, 1) * 224).astype(int) for bbox in annotation['bbox']]
             gt_bboxes[annotation['file']] = bboxes
+            dert_bboxes = [(np.clip(np.array(dert_bbox), 0, 1) * 800).astype(int) for dert_bbox in annotation['bbox']]
+            gt_bboxes_dert[annotation['file']] = dert_bboxes
 
-    return gt_bboxes
+    return gt_bboxes, gt_bboxes_dert
 
 
-def bbox2gtmap(bboxes, format='flickr'):
+def bbox2gtmap(bboxes, dert_bboxes, format='flickr'):
     gt_map = np.zeros([224, 224])
+    gt_map_dert = np.zeros([800, 800])
     for xmin, ymin, xmax, ymax in bboxes:
         temp = np.zeros([224, 224])
         temp[ymin:ymax, xmin:xmax] = 1
         gt_map += temp
 
+    for xmin, ymin, xmax, ymax in dert_bboxes:
+        temp = np.zeros([800, 800])
+        temp[ymin:ymax, xmin:xmax] = 1
+        gt_map_dert += temp
+
     if format == 'flickr':
         # Annotation consensus
         gt_map = gt_map / 2
         gt_map[gt_map > 1] = 1
+        gt_map_dert = gt_map_dert / 2
+        gt_map_dert[gt_map_dert > 1] = 1
 
     elif format == 'vggss':
         # Single annotation
         gt_map[gt_map > 0] = 1
+        gt_map_dert[gt_map_dert > 0] = 1
 
-    return gt_map
+    return gt_map, gt_map_dert
 
 
 class AudioVisualDataset(Dataset):
-    def __init__(self, image_files, audio_files, image_path, audio_path, audio_dur=3., image_transform=None, audio_transform=None, all_bboxes=None, bbox_format='flickr'):
+    def __init__(self, image_files, audio_files, image_path, audio_path, audio_dur=3., image_transform=None, detr_transform=None, audio_transform=None, all_bboxes=None, all_bboxes_detr=None, bbox_format='flickr'):
         super().__init__()
         self.audio_path = audio_path
         self.image_path = image_path
@@ -93,10 +111,12 @@ class AudioVisualDataset(Dataset):
         self.audio_files = audio_files
         self.image_files = image_files
         self.all_bboxes = all_bboxes
+        self.all_bboxes_detr = all_bboxes_detr
         self.bbox_format = bbox_format
 
         self.image_transform = image_transform
         self.audio_transform = audio_transform
+        self.detr_transform = detr_transform
 
     def getitem(self, idx):
         file = self.image_files[idx]
@@ -105,17 +125,22 @@ class AudioVisualDataset(Dataset):
         # Image
         img_fn = os.path.join(self.image_path, self.image_files[idx])
         frame = self.image_transform(load_image(img_fn))
+        if self.detr_transform is not None:
+            detr_frame = self.detr_transform(load_image(img_fn))
+        else:
+            detr_frame = np.zeros((1, 1))
 
         # Audio
         audio_fn = os.path.join(self.audio_path, self.audio_files[idx])
         spectrogram = self.audio_transform(load_spectrogram(audio_fn))
 
         bboxes = {}
+        bboxes_detr = {}
         if self.all_bboxes is not None:
-            bboxes['bboxes'] = self.all_bboxes[file_id]
-            bboxes['gt_map'] = bbox2gtmap(self.all_bboxes[file_id], self.bbox_format)
+            bboxes['bboxes'], bboxes_detr['bboxes'] = self.all_bboxes[file_id], self.all_bboxes_detr[file_id]
+            bboxes['gt_map'], bboxes_detr['gt_map'] = bbox2gtmap(self.all_bboxes[file_id], self.all_bboxes_detr[file_id], self.bbox_format)
 
-        return frame, spectrogram, bboxes, file_id
+        return frame, detr_frame, spectrogram, bboxes, bboxes_detr, file_id
 
     def __len__(self):
         return len(self.image_files)
@@ -150,7 +175,7 @@ def get_train_dataset(args):
 
     # Transforms
     image_transform = transforms.Compose([
-        transforms.Resize(int(224 * 1.1), Image.BICUBIC),
+        transforms.Resize(int(224 * 1.1), transforms.InterpolationMode.BICUBIC),
         transforms.RandomCrop((224, 224)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
@@ -206,16 +231,22 @@ def get_test_dataset(args):
     assert len(image_files) > 0
     assert len(audio_files) > 0
     # Bounding boxes
-    all_bboxes = load_all_bboxes(args.test_gt_path, format=bbox_format)
+    all_bboxes, all_bboxes_detr = load_all_bboxes(args.test_gt_path, format=bbox_format)
 
     # Transforms
     image_transform = transforms.Compose([
-        transforms.Resize((224, 224), Image.BICUBIC),
+        transforms.Resize((224, 224), transforms.InterpolationMode.BICUBIC),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])])
     audio_transform = transforms.Compose([transforms.ToTensor(),
                                           transforms.Normalize(mean=[0.0], std=[12.0])])
+
+    detr_transform = transforms.Compose([
+        transforms.Resize((800, 800)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
 
     return AudioVisualDataset(
         image_files=image_files,
@@ -224,8 +255,10 @@ def get_test_dataset(args):
         audio_path=audio_path,
         audio_dur=3.,
         image_transform=image_transform,
+        detr_transform=detr_transform,
         audio_transform=audio_transform,
         all_bboxes=all_bboxes,
+        all_bboxes_detr=all_bboxes_detr,
         bbox_format=bbox_format
     )
 

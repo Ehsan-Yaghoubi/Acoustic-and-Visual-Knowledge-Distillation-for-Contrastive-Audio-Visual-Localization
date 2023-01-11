@@ -9,7 +9,7 @@ import argparse
 from model import EZVSL
 from datasets import get_test_dataset, inverse_normalize
 import cv2
-
+import random
 
 def get_arguments():
     parser = argparse.ArgumentParser()
@@ -61,6 +61,8 @@ def main(args):
         Unsqueeze(1)
     )
 
+    detr_model = torch.hub.load('facebookresearch/detr:main', 'detr_resnet50', pretrained=True)
+
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
     elif args.multiprocessing_distributed:
@@ -68,15 +70,16 @@ def main(args):
             torch.cuda.set_device(args.gpu)
             audio_visual_model.cuda(args.gpu)
             object_saliency_model.cuda(args.gpu)
+            detr_model.cuda(args.gpu)
             audio_visual_model = torch.nn.parallel.DistributedDataParallel(audio_visual_model, device_ids=[args.gpu])
             object_saliency_model = torch.nn.parallel.DistributedDataParallel(object_saliency_model, device_ids=[args.gpu])
 
     # Load weights
-    ckp_fn = os.path.join(model_dir, 'official_best.pth')
+    ckp_fn = os.path.join(model_dir, 'seed10_100e_best(e4).pth')
     if os.path.exists(ckp_fn):
         ckp = torch.load(ckp_fn, map_location='cpu')
         audio_visual_model.load_state_dict({k.replace('module.', ''): ckp['model'][k] for k in ckp['model']})
-        print(f'loaded from {os.path.join(model_dir, "official_best.pth")}')
+        print(f'loaded from {os.path.join(model_dir, "seed10_100e_best(e4).pth")}')
     else:
         print(f"Checkpoint not found: {ckp_fn}")
 
@@ -85,21 +88,24 @@ def main(args):
     testdataloader = DataLoader(testdataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
     print("Loaded dataloader.")
 
-    validate(testdataloader, audio_visual_model, object_saliency_model, viz_dir, args)
+    validate(testdataloader, audio_visual_model, object_saliency_model, detr_model, viz_dir, args)
 
 
 @torch.no_grad()
-def validate(testdataloader, audio_visual_model, object_saliency_model, viz_dir, args):
+def validate(testdataloader, audio_visual_model, object_saliency_model, detr_model, viz_dir, args):
     audio_visual_model.train(False)
     object_saliency_model.train(False)
 
     evaluator_av = utils.Evaluator()
     evaluator_obj = utils.Evaluator()
+    evaluator_detr_224 = utils.Evaluator()
+    evaluator_detr_800 = utils.Evaluator()
     evaluator_av_obj = utils.Evaluator()
-    for step, (image, spec, bboxes, name) in enumerate(testdataloader):
+    for step, (image, detr_image, spec, bboxes, bboxes_detr, name) in enumerate(testdataloader):
         if args.gpu is not None:
             spec = spec.cuda(args.gpu, non_blocking=True)
             image = image.cuda(args.gpu, non_blocking=True)
+            detr_image = detr_image.cuda(args.gpu, non_blocking=True)
 
         # Compute S_AVL
         heatmap_av = audio_visual_model(image.float(), spec.float())[1].unsqueeze(1)
@@ -111,22 +117,38 @@ def validate(testdataloader, audio_visual_model, object_saliency_model, viz_dir,
         heatmap_obj = F.interpolate(img_feat, size=(224, 224), mode='bilinear', align_corners=True)
         heatmap_obj = heatmap_obj.data.cpu().numpy()
 
+        # Compute detr_OBJ
+
+        detr_img_feat = get_detr_features(detr_model, detr_image)
+        detr_heatmap_800 = F.interpolate(detr_img_feat, size=(800, 800), mode='bilinear', align_corners=True)
+        detr_heatmap_800 = detr_heatmap_800.data.cpu().numpy()
+        detr_heatmap_224 = F.interpolate(detr_img_feat, size=(224, 224), mode='bilinear', align_corners=True)
+        detr_heatmap_224 = detr_heatmap_224.data.cpu().numpy()
+
         # Compute eval metrics and save visualizations
         for i in range(spec.shape[0]):
             pred_av = utils.normalize_img(heatmap_av[i, 0])
             pred_obj = utils.normalize_img(heatmap_obj[i, 0])
-            pred_av_obj = utils.normalize_img(pred_av * args.alpha + pred_obj * (1 - args.alpha))
+            pred_detr_224 = utils.normalize_img(detr_heatmap_224[i, 0])
+            pred_detr_800 = utils.normalize_img(detr_heatmap_800[i, 0])
+            pred_av_obj = utils.normalize_img(pred_av/3 + pred_obj/3 + pred_detr_224/3)
 
-            gt_map = bboxes['gt_map'].data.cpu().numpy()
+            gt_map_224 = bboxes['gt_map'].data.cpu().numpy()
+            gt_map_800 = bboxes_detr['gt_map'].data.cpu().numpy()
 
             thr_av = np.sort(pred_av.flatten())[int(pred_av.shape[0] * pred_av.shape[1] * 0.5)]
-            evaluator_av.cal_CIOU(pred_av, gt_map, thr_av)
+            evaluator_av.cal_CIOU(pred_av, gt_map_224, (224, 224), thr_av)
 
             thr_obj = np.sort(pred_obj.flatten())[int(pred_obj.shape[0] * pred_obj.shape[1] * 0.5)]
-            evaluator_obj.cal_CIOU(pred_obj, gt_map, thr_obj)
+            evaluator_obj.cal_CIOU(pred_obj, gt_map_224, (224, 224), thr_obj)
+
+            thr_detr_224 = np.sort(pred_detr_224.flatten())[int(pred_detr_224.shape[0] * pred_detr_224.shape[1] * 0.5)]
+            evaluator_detr_224.cal_CIOU(pred_detr_224, gt_map_224, (224, 224), thr_detr_224)
+            thr_detr_800 = np.sort(pred_detr_800.flatten())[int(pred_detr_800.shape[0] * pred_detr_800.shape[1] * 0.5)]
+            evaluator_detr_800.cal_CIOU(pred_detr_800, gt_map_800, (800, 800), thr_detr_800)
 
             thr_av_obj = np.sort(pred_av_obj.flatten())[int(pred_av_obj.shape[0] * pred_av_obj.shape[1] * 0.5)]
-            evaluator_av_obj.cal_CIOU(pred_av_obj, gt_map, thr_av_obj)
+            evaluator_av_obj.cal_CIOU(pred_av_obj, gt_map_224, (224, 224), thr_av_obj)
 
             if args.save_visualizations:
                 denorm_image = inverse_normalize(image).squeeze(0).permute(1, 2, 0).cpu().numpy()[:, :, ::-1]
@@ -148,12 +170,22 @@ def validate(testdataloader, audio_visual_model, object_saliency_model, viz_dir,
                 fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
                 cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_obj.jpg'), fin)
 
+                heatmap_img_detr_800 = np.uint8(pred_detr_800 * 255)
+                heatmap_img_detr_800 = cv2.applyColorMap(heatmap_img_detr_800[:, :, np.newaxis], cv2.COLORMAP_JET)
+                fin_detr_800 = cv2.addWeighted(heatmap_img_detr_800, 0.8, np.uint8(heatmap_img_detr_800), 0.2, 0)
+                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_detr_800.jpg'), fin_detr_800)
+
                 heatmap_img = np.uint8(pred_av_obj*255)
                 heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
                 fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
                 cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_av_obj.jpg'), fin)
 
-        print(f'{step+1}/{len(testdataloader)}: map_av={evaluator_av.finalize_AP50():.2f} map_obj={evaluator_obj.finalize_AP50():.2f} map_av_obj={evaluator_av_obj.finalize_AP50():.2f}')
+        print(f'{step+1}/{len(testdataloader)}: '
+              f'map_av={evaluator_av.finalize_AP50():.2f} '
+              f'map_obj={evaluator_obj.finalize_AP50():.2f} '
+              f'map_detr_800={evaluator_detr_800.finalize_AP50():.2f} '
+              f'map_detr_224={evaluator_detr_224.finalize_AP50():.2f} '
+              f'map_av_obj={evaluator_av_obj.finalize_AP50():.2f}')
 
     def compute_stats(eval):
         mAP = eval.finalize_AP50()
@@ -163,10 +195,14 @@ def validate(testdataloader, audio_visual_model, object_saliency_model, viz_dir,
 
     print('AV: AP50(cIoU)={}, Avg-cIoU={}, AUC={}'.format(*compute_stats(evaluator_av)))
     print('Obj: AP50(cIoU)={}, Avg-cIoU={}, AUC={}'.format(*compute_stats(evaluator_obj)))
+    print('detr_224: AP50(cIoU)={}, Avg-cIoU={}, AUC={}'.format(*compute_stats(evaluator_detr_224)))
+    print('detr_800: AP50(cIoU)={}, Avg-cIoU={}, AUC={}'.format(*compute_stats(evaluator_detr_800)))
     print('AV_Obj: AP50(cIoU)={}, Avg-cIoU={}, AUC={}'.format(*compute_stats(evaluator_av_obj)))
 
     utils.save_iou(evaluator_av.ciou, 'av', viz_dir)
     utils.save_iou(evaluator_obj.ciou, 'obj', viz_dir)
+    utils.save_iou(evaluator_detr_224.ciou, 'detr', viz_dir)
+    utils.save_iou(evaluator_detr_800.ciou, 'detr', viz_dir)
     utils.save_iou(evaluator_av_obj.ciou, 'av_obj', viz_dir)
 
 
@@ -187,6 +223,36 @@ class Unsqueeze(nn.Module):
     def forward(self, x):
         return x.unsqueeze(self.dim)
 
+
+def get_detr_features(model, input_img):
+    conv_features, enc_attn_weights, dec_attn_weights = [], [], []
+    hooks = [model.backbone[-2].register_forward_hook(lambda self, input, output: conv_features.append(output)),
+             model.transformer.encoder.layers[-1].self_attn.register_forward_hook(lambda self, input, output: enc_attn_weights.append(output[1])),
+             model.transformer.decoder.layers[-1].multihead_attn.register_forward_hook(lambda self, input, output: dec_attn_weights.append(output[1]))]
+    outputs = model(input_img)
+
+    # keep only predictions with 0.7+ confidence
+    probas = outputs['pred_logits'].softmax(-1)[0, :, :-1]
+    keep = probas.max(-1).values > 0.3
+
+    for hook in hooks:
+        hook.remove()
+    # don't need the list anymore
+    conv_features = conv_features[0]
+    enc_attn_weights = enc_attn_weights[0]
+    dec_attn_weights = dec_attn_weights[0]
+    # get the feature map shape
+    h, w = conv_features['0'].tensors.shape[-2:]
+    dert_dec_feats = dec_attn_weights.view(dec_attn_weights.size()[1], h, w)
+    if len(keep.nonzero()) == 1:
+        feats = dert_dec_feats[keep.nonzero()[0][0]].unsqueeze(0).unsqueeze(0)
+    else:  # len(keep.nonzero()[0]) > 1:
+        strong_featues = torch.zeros((len(keep.nonzero())), dert_dec_feats.size()[1], dert_dec_feats.size()[2])
+        for idx, index in enumerate(keep.nonzero()):
+            one_feat = dert_dec_feats[index[0]]
+            strong_featues[idx, :, :] = one_feat
+        feats = strong_featues.abs().mean(dim=0).unsqueeze(0).unsqueeze(0)
+    return feats
 
 if __name__ == "__main__":
     main(get_arguments())

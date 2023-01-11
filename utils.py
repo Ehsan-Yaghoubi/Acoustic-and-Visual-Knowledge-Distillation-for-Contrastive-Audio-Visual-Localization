@@ -10,8 +10,8 @@ class Evaluator(object):
         super(Evaluator, self).__init__()
         self.ciou = []
 
-    def cal_CIOU(self, infer, gtmap, thres=0.01):
-        infer_map = np.zeros((224, 224))
+    def cal_CIOU(self, infer, gtmap, input_size, thres=0.01):
+        infer_map = np.zeros(input_size)
         infer_map[infer >= thres] = 1
         ciou = np.sum(infer_map*gtmap) / (np.sum(gtmap) + np.sum(infer_map * (gtmap==0)))
 

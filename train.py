@@ -12,7 +12,7 @@ import torch.distributed as dist
 import utils
 from model import EZVSL
 from datasets import get_train_dataset, get_test_dataset
-
+import random
 
 def get_arguments():
     parser = argparse.ArgumentParser()
@@ -34,7 +34,7 @@ def get_arguments():
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs")
     parser.add_argument('--batch_size', default=128, type=int, help='Batch Size')
     parser.add_argument("--init_lr", type=float, default=0.0001, help="initial learning rate")
-    parser.add_argument("--seed", type=int, default=12345, help="random seed")
+    parser.add_argument("--seed", type=int, default=10, help="random seed")
 
     # Distributed params
     parser.add_argument('--workers', type=int, default=8)
@@ -50,6 +50,9 @@ def get_arguments():
 
 
 def main(args):
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     mp.set_start_method('spawn')
     args.dist_url = f'tcp://{args.node}:{args.port}'
     print('Using url {}'.format(args.dist_url))
@@ -193,7 +196,7 @@ def train(train_loader, model, optimizer, epoch, args):
     )
 
     end = time.time()
-    for i, (image, spec, _, _) in enumerate(train_loader):
+    for i, (image, _, spec, _, _, _) in enumerate(train_loader):
         data_time.update(time.time() - end)
 
         if args.gpu is not None:
@@ -219,7 +222,7 @@ def validate(test_loader, model, args):
     model.train(False)
     evaluator = utils.Evaluator()
     assert len(test_loader) > 0
-    for step, (image, spec, bboxes, _) in enumerate(test_loader):
+    for step, (image, _, spec, bboxes, _, _) in enumerate(test_loader):
         if torch.cuda.is_available():
             spec = spec.cuda(args.gpu, non_blocking=True)
             image = image.cuda(args.gpu, non_blocking=True)
@@ -232,7 +235,7 @@ def validate(test_loader, model, args):
             pred = utils.normalize_img(avl_map[i, 0])
             gt_map = bboxes['gt_map'].data.cpu().numpy()
             thr = np.sort(pred.flatten())[int(pred.shape[0] * pred.shape[1] / 2)]
-            evaluator.cal_CIOU(pred, gt_map, thr)
+            evaluator.cal_CIOU(pred, gt_map, (224, 224), thr)
 
     cIoU = evaluator.finalize_AP50()
     AUC = evaluator.finalize_AUC()
