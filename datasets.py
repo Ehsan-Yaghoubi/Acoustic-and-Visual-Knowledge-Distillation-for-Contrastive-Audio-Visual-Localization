@@ -1,5 +1,6 @@
 import os
 import csv
+import torch
 import numpy as np
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -101,15 +102,15 @@ def bbox2gtmap(bboxes, dert_bboxes, format='flickr'):
     return gt_map, gt_map_dert
 
 
-class AudioVisualDataset(Dataset):
-    def __init__(self, image_files, audio_files, image_path, audio_path, audio_dur=3., image_transform=None, detr_transform=None, audio_transform=None, all_bboxes=None, all_bboxes_detr=None, bbox_format='flickr'):
+class AudioVisualDatasetTest(Dataset):
+    def __init__(self, paths, files, audio_dur=3., image_transform=None, detr_transform=None, audio_transform=None, all_bboxes=None, all_bboxes_detr=None, bbox_format='flickr'):
         super().__init__()
-        self.audio_path = audio_path
-        self.image_path = image_path
-        self.audio_dur = audio_dur
+        self.image_files = files[0]
+        self.audio_files = files[1]
+        self.image_path = paths[0]
+        self.audio_path = paths[1]
 
-        self.audio_files = audio_files
-        self.image_files = image_files
+        self.audio_dur = audio_dur
         self.all_bboxes = all_bboxes
         self.all_bboxes_detr = all_bboxes_detr
         self.bbox_format = bbox_format
@@ -152,15 +153,98 @@ class AudioVisualDataset(Dataset):
             return self.getitem(random.sample(range(len(self)), 1)[0])
 
 
-def get_train_dataset(args):
-    audio_path = f"{args.train_data_path}/audio/"
-    image_path = f"{args.train_data_path}/frames/"
+class AudioVisualDatasetTrain(Dataset):
+    def __init__(self, paths, files, audio_dur=3., image_transform=None, detr_transform=None, audio_transform=None, all_bboxes=None, all_bboxes_detr=None,
+                 bbox_format='flickr', trans=None):
+        super().__init__()
+        self.image_files = files[0]
+        self.audio_files = files[1]
+        self.audio_feats = files[2]
+        self.detr_conv_feats = files[3]
+        self.detr_dec_feats = files[4]
+        self.detr_enc_feats = files[5]
+        self.image_path = paths[0]
+        self.audio_path = paths[1]
+        self.audio_feat_path = paths[2]
+        self.detr_conv_feats_path = paths[3]
+        self.detr_dec_feats_path = paths[4]
+        self.detr_enc_feats_path = paths[5]
 
+        self.audio_dur = audio_dur
+        self.all_bboxes = all_bboxes
+        self.all_bboxes_detr = all_bboxes_detr
+        self.bbox_format = bbox_format
+
+        self.image_transform = image_transform
+        self.audio_transform = audio_transform
+        self.detr_transform = detr_transform
+        self.trans = trans
+
+    def getitem(self, idx):
+        file = self.image_files[idx]
+        file_id = file.split('.')[0]
+
+        # Image
+        img_fn = os.path.join(self.image_path, self.image_files[idx])
+        frame = self.image_transform(load_image(img_fn))
+        if self.detr_transform is not None:
+            detr_frame = self.detr_transform(load_image(img_fn))
+        else:
+            detr_frame = np.zeros((1, 1))
+
+        # Audio
+        audio_fn = os.path.join(self.audio_path, self.audio_files[idx])
+        spectrogram = self.audio_transform(load_spectrogram(audio_fn))
+
+        aud_feat_path = os.path.join(self.audio_feat_path, self.audio_feats[idx])
+        f_conv_detr_path = os.path.join(self.detr_conv_feats_path, self.detr_conv_feats[idx])
+        f_enc_detr_path = os.path.join(self.detr_enc_feats_path, self.detr_enc_feats[idx])
+        f_dec_detr__path = os.path.join(self.detr_dec_feats_path, self.detr_dec_feats[idx])
+        aud_embedding = torch.tensor(np.load(aud_feat_path).squeeze())
+        conv_detr_feat = torch.tensor(np.load(f_conv_detr_path).squeeze())
+        enc_detr_feat = torch.tensor(np.load(f_enc_detr_path).squeeze())
+        dec_detr_feat = torch.tensor(np.load(f_dec_detr__path).squeeze())
+        assert conv_detr_feat.size() == enc_detr_feat.size() == dec_detr_feat.size() == (25, 25)
+        assert aud_embedding.size() == (2048,)
+
+        bboxes = {}
+        bboxes_detr = {}
+        if self.all_bboxes is not None:
+            bboxes['bboxes'], bboxes_detr['bboxes'] = self.all_bboxes[file_id], self.all_bboxes_detr[file_id]
+            bboxes['gt_map'], bboxes_detr['gt_map'] = bbox2gtmap(self.all_bboxes[file_id], self.all_bboxes_detr[file_id], self.bbox_format)
+
+        return frame, detr_frame, spectrogram, aud_embedding, conv_detr_feat, enc_detr_feat, dec_detr_feat, bboxes, bboxes_detr, file_id
+
+    def __len__(self):
+        return len(self.image_files)
+
+    def __getitem__(self, idx):
+        try:
+            return self.getitem(idx)
+        except Exception:
+            return self.getitem(random.sample(range(len(self)), 1)[0])
+
+
+def check_available_samples(data_path, kind):
+    _path = os.path.join(data_path, '{}'.format(kind))
+    _files = {f.split('.')[0] for dirpath, dirnames, filenames in os.walk(_path) for f in filenames}
+    print('Number of available {} files: {}'.format(kind, len(_files)))
+    assert len(_files) != 0
+    return _files, _path
+
+
+def get_train_dataset(args):
     # List directory
-    audio_files = {fn.split('.flac')[0] for fn in os.listdir(audio_path) if fn.endswith('.flac')}
-    image_files = {fn.split('.jpg')[0] for fn in os.listdir(image_path) if fn.endswith('.jpg')}
-    avail_files = audio_files.intersection(image_files)
-    print(f"{len(avail_files)} available files")
+    audio_files, audio_path = check_available_samples(args.train_data_path, 'audio')
+    image_files, image_path = check_available_samples(args.train_data_path, 'frames')
+    audio_feats, audio_feat_path = check_available_samples(args.train_data_path, 'audio_feats')
+    detr_conv_feats, detr_conv_feats_path = check_available_samples(args.train_data_path, 'detr_conv_feats')
+    detr_dec_feats, detr_dec_feats_path = check_available_samples(args.train_data_path, 'detr_dec_feats')
+    detr_enc_feats, detr_enc_feats_path = check_available_samples(args.train_data_path, 'detr_enc_feats')
+    # check available samples
+    avail_files = audio_files.intersection(image_files).intersection(audio_feats).intersection(detr_conv_feats).intersection(detr_dec_feats).intersection(detr_enc_feats)
+    print(f"{len(avail_files)} available samples")
+    assert len(avail_files) != 0
 
     # Subsample if specified
     if args.trainset.lower() in {'vggss', 'flickr'}:
@@ -171,7 +255,11 @@ def get_train_dataset(args):
         print(f"{len(avail_files)} valid subset files")
     avail_files = sorted(list(avail_files))
     audio_files = sorted([dt+'.flac' for dt in avail_files])
-    image_files = sorted([dt+'.jpg' for dt in avail_files])
+    audio_feats = sorted([dt + '.flac.npy' for dt in avail_files])
+    image_files = sorted([dt + '.jpg' for dt in avail_files])
+    detr_conv_feats = sorted([dt + '.jpg.npy' for dt in avail_files])
+    detr_dec_feats = sorted([dt + '.jpg.npy' for dt in avail_files])
+    detr_enc_feats = sorted([dt + '.jpg.npy' for dt in avail_files])
 
     # Transforms
     image_transform = transforms.Compose([
@@ -185,15 +273,12 @@ def get_train_dataset(args):
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.0], std=[12.0])])
 
-    return AudioVisualDataset(
-        image_files=image_files,
-        audio_files=audio_files,
-        image_path=image_path,
-        audio_path=audio_path,
-        audio_dur=3.,
-        image_transform=image_transform,
-        audio_transform=audio_transform
-    )
+    trans = transforms.Compose([transforms.ToTensor()])
+
+    files = [image_files, audio_files, audio_feats, detr_conv_feats, detr_dec_feats, detr_enc_feats]
+    paths = [image_path, audio_path, audio_feat_path, detr_conv_feats_path, detr_dec_feats_path, detr_enc_feats_path]
+
+    return AudioVisualDatasetTrain(paths, files, audio_dur=3., image_transform=image_transform, audio_transform=audio_transform)
 
 
 def get_test_dataset(args):
@@ -248,19 +333,18 @@ def get_test_dataset(args):
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
 
-    return AudioVisualDataset(
-        image_files=image_files,
-        audio_files=audio_files,
-        image_path=image_path,
-        audio_path=audio_path,
-        audio_dur=3.,
-        image_transform=image_transform,
-        detr_transform=detr_transform,
-        audio_transform=audio_transform,
-        all_bboxes=all_bboxes,
-        all_bboxes_detr=all_bboxes_detr,
-        bbox_format=bbox_format
-    )
+    trans = transforms.Compose([transforms.ToTensor()])
+
+    files = [image_files, audio_files]
+    paths = [image_path, audio_path]
+    return AudioVisualDatasetTest(paths, files,
+                                  audio_dur=3.,
+                                  image_transform=image_transform,
+                                  detr_transform=detr_transform,
+                                  audio_transform=audio_transform,
+                                  all_bboxes=all_bboxes,
+                                  all_bboxes_detr=all_bboxes_detr,
+                                  bbox_format=bbox_format)
 
 
 def inverse_normalize(tensor):

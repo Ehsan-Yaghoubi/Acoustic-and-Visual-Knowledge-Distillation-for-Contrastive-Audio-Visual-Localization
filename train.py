@@ -34,7 +34,7 @@ def get_arguments():
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs")
     parser.add_argument('--batch_size', default=128, type=int, help='Batch Size')
     parser.add_argument("--init_lr", type=float, default=0.0001, help="initial learning rate")
-    parser.add_argument("--seed", type=int, default=10, help="random seed")
+    parser.add_argument("--seed", type=int, default=0, help="random seed")
 
     # Distributed params
     parser.add_argument('--workers', type=int, default=8)
@@ -50,9 +50,17 @@ def get_arguments():
 
 
 def main(args):
+    ## os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    # for reproducibility of the results. Note, up-sampling operation that is used in the codes is not reproducible, so you may not reach the exact same results each time.
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
+    torch.use_deterministic_algorithms(True,  warn_only=True)
+    torch.backends.cudnn.deterministic = True
+
+    # multiprocessing
     mp.set_start_method('spawn')
     args.dist_url = f'tcp://{args.node}:{args.port}'
     print('Using url {}'.format(args.dist_url))
@@ -182,6 +190,46 @@ def main_worker(gpu, ngpus_per_node, args):
             if args.rank == 0:
                 torch.save(ckp, os.path.join(model_dir, 'best.pth'))
 
+def max_xmil_loss(img, aud):
+    B = img.shape[0]
+    Slogits = torch.einsum('nchw,mc->nmhw', img, aud) / 0.03
+    logits = Slogits.flatten(-2, -1).max(dim=-1)[0]
+    labels = torch.arange(B).long().to(img.device)
+    loss = F.cross_entropy(logits, labels) + F.cross_entropy(logits.permute(1, 0), labels)
+    return loss, Slogits
+
+def detr_panns_loss(img, aud, aud_embedding, conv_detr_feat, enc_detr_feat, dec_detr_feat):
+    #mae_loss = torch.nn.L1Loss()
+    mae_loss = torch.nn.MSELoss()
+    #cos_loss = torch.nn.CosineSimilarity()
+    aud_loss = mae_loss(aud, aud_embedding)
+    img_f = F.interpolate(img, (25, 25), mode='bilinear', align_corners=False)
+
+    # Flatten:
+    shape = dec_detr_feat.shape
+    tensor_reshaped = dec_detr_feat.reshape(shape[0], -1)
+    # Drop all rows containing any nan:
+    tensor_filtered = tensor_reshaped[~torch.any(tensor_reshaped.isnan(), dim=1)]
+    # same samples are selected from img_f
+    img_feat = torch.mean(img_f, dim=1)
+    img_feat_reshaped = img_feat.reshape(shape[0], -1)
+    img_feat_reshaped = img_feat_reshaped[~torch.any(tensor_reshaped.isnan(), dim=1)]
+    img_loss = mae_loss(img_feat_reshaped, tensor_filtered)
+    """
+    mask_nan = ~torch.isnan(dec_detr_feat)
+    dec_detr_feat_filtered = dec_detr_feat[mask_nan]
+    dec_detr_feat = torch.nn.functional.normalize(dec_detr_feat.unsqueeze(-3), dim=1)
+    Slogits = torch.einsum('nchw,mc->nmhw', img, aud) / 0.03
+    Slogits = F.interpolate(Slogits, (25, 25), mode='bilinear', align_corners=False)
+    img_feat = torch.mean(img_f, dim=1)
+    img_feat_reshaped = img_feat.reshape(img_feat.shape[0], -1)
+    dec_detr_feat_reshaped = dec_detr_feat.reshape(dec_detr_feat.shape[0], -1)
+    dec_detr_feat_filter = dec_detr_feat_reshaped[~torch.isnan(dec_detr_feat_reshaped)]
+    value = mae_loss(img_feat_reshaped, dec_detr_feat_reshaped)
+    # remove 'nan' values and get the mean over all samples and normalize.
+    img_loss = value[~torch.isnan(value)].sum()
+    """
+    return (1000*aud_loss)+(100000*img_loss)
 
 def train(train_loader, model, optimizer, epoch, args):
     model.train()
@@ -196,14 +244,28 @@ def train(train_loader, model, optimizer, epoch, args):
     )
 
     end = time.time()
-    for i, (image, _, spec, _, _, _) in enumerate(train_loader):
+    for i, (image, _, spec, aud_embedding, conv_detr_feat, enc_detr_feat, dec_detr_feat, _, _, _) in enumerate(train_loader):
         data_time.update(time.time() - end)
 
         if args.gpu is not None:
             spec = spec.cuda(args.gpu, non_blocking=True)
             image = image.cuda(args.gpu, non_blocking=True)
+            aud_embedding = aud_embedding.cuda(args.gpu, non_blocking=True)
+            conv_detr_feat = conv_detr_feat.cuda(args.gpu, non_blocking=True)
+            enc_detr_feat = enc_detr_feat.cuda(args.gpu, non_blocking=True)
+            dec_detr_feat = dec_detr_feat.cuda(args.gpu, non_blocking=True)
 
-        loss, _ = model(image.float(), spec.float())
+        img_f, aud_f = model(image.float(), spec.float())
+        # Compute loss
+        av_loss, logits = max_xmil_loss(img_f, aud_f)
+        # Learn from Detr (object detector) and the Panns (sound classifier) features
+        pk_loss = detr_panns_loss(img_f, aud_f, aud_embedding, conv_detr_feat, enc_detr_feat, dec_detr_feat)
+
+        loss = pk_loss + av_loss
+        # Compute avl maps
+       # with torch.no_grad():
+            #B = img_f.shape[0]
+            #Savl = logits[torch.arange(B), torch.arange(B)]
         loss_mtr.update(loss.item(), image.shape[0])
 
         optimizer.zero_grad()
@@ -227,8 +289,12 @@ def validate(test_loader, model, args):
             spec = spec.cuda(args.gpu, non_blocking=True)
             image = image.cuda(args.gpu, non_blocking=True)
 
-        avl_map = model(image.float(), spec.float())[1].unsqueeze(1)
-        avl_map = F.interpolate(avl_map, size=(224, 224), mode='bicubic', align_corners=False)
+        img_f, aud_f = model(image.float(), spec.float())
+        with torch.no_grad():
+            Slogits = torch.einsum('nchw,mc->nmhw', img_f, aud_f) / args.tau
+            Savl = Slogits[torch.arange(img_f.shape[0]), torch.arange(img_f.shape[0])]
+
+        avl_map = F.interpolate(Savl.unsqueeze(1), size=(224, 224), mode='bicubic', align_corners=False)
         avl_map = avl_map.data.cpu().numpy()
 
         for i in range(spec.shape[0]):

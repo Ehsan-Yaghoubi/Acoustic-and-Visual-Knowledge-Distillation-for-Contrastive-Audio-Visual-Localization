@@ -37,13 +37,19 @@ def get_arguments():
     parser.add_argument('--port', type=int, default=12345)
     parser.add_argument('--dist_url', type=str, default='tcp://localhost:12345')
     parser.add_argument('--multiprocessing_distributed', action='store_true')
+    parser.add_argument("--seed", type=int, default=0, help="random seed")
 
     return parser.parse_args()
 
 
 def main(args):
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
+    #os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
     # Model dir
     model_dir = os.path.join(args.model_dir, args.experiment_name)
     viz_dir = os.path.join(model_dir, 'viz')
@@ -75,11 +81,11 @@ def main(args):
             object_saliency_model = torch.nn.parallel.DistributedDataParallel(object_saliency_model, device_ids=[args.gpu])
 
     # Load weights
-    ckp_fn = os.path.join(model_dir, 'seed10_100e_best(e4).pth')
+    ckp_fn = os.path.join(model_dir, 'best.pth')
     if os.path.exists(ckp_fn):
         ckp = torch.load(ckp_fn, map_location='cpu')
         audio_visual_model.load_state_dict({k.replace('module.', ''): ckp['model'][k] for k in ckp['model']})
-        print(f'loaded from {os.path.join(model_dir, "seed10_100e_best(e4).pth")}')
+        print(f'loaded from {os.path.join(model_dir, "best.pth")}')
     else:
         print(f"Checkpoint not found: {ckp_fn}")
 
@@ -108,7 +114,12 @@ def validate(testdataloader, audio_visual_model, object_saliency_model, detr_mod
             detr_image = detr_image.cuda(args.gpu, non_blocking=True)
 
         # Compute S_AVL
-        heatmap_av = audio_visual_model(image.float(), spec.float())[1].unsqueeze(1)
+        img_f, aud_f = audio_visual_model(image.float(), spec.float())
+        with torch.no_grad():
+            Slogits = torch.einsum('nchw,mc->nmhw', img_f, aud_f) / args.tau
+            Savl = Slogits[torch.arange(img_f.shape[0]), torch.arange(img_f.shape[0])]
+            heatmap_av = Savl.unsqueeze(1)
+
         heatmap_av = F.interpolate(heatmap_av, size=(224, 224), mode='bilinear', align_corners=True)
         heatmap_av = heatmap_av.data.cpu().numpy()
 

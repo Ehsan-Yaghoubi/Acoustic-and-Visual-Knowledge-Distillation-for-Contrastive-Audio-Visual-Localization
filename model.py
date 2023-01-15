@@ -13,14 +13,16 @@ class EZVSL(nn.Module):
         self.imgnet = resnet18(weights="ResNet18_Weights.DEFAULT")
         self.imgnet.avgpool = nn.Identity()
         self.imgnet.fc = nn.Identity()
-        self.img_proj = nn.Conv2d(512, dim, kernel_size=(1, 1))
+        self.img_proj = nn.Conv2d(512, 2048, kernel_size=(1, 1))
 
         # Audio model
         self.audnet = resnet18()
         self.audnet.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.audnet.avgpool = nn.AdaptiveMaxPool2d((1, 1))
         self.audnet.fc = nn.Identity()
-        self.aud_proj = nn.Linear(512, dim)
+        self.aud_proj = nn.Linear(512, 2048)
+
+        #self.aud_emb_proj = nn.Linear(2048, dim)
 
         # Initialize weights (except pretrained visual model)
         for net in [self.audnet, self.img_proj, self.aud_proj]:
@@ -35,14 +37,6 @@ class EZVSL(nn.Module):
                     nn.init.normal_(m.weight, mean=1, std=0.02)
                     nn.init.constant_(m.bias, 0)
 
-    def max_xmil_loss(self, img, aud):
-        B = img.shape[0]
-        Slogits = torch.einsum('nchw,mc->nmhw', img, aud) / self.tau
-        logits = Slogits.flatten(-2, -1).max(dim=-1)[0]
-        labels = torch.arange(B).long().to(img.device)
-        loss = F.cross_entropy(logits, labels) + F.cross_entropy(logits.permute(1, 0), labels)
-        return loss, Slogits
-
     def forward(self, image, audio):
         # Image
         img = self.imgnet(image).unflatten(1, (512, 7, 7))
@@ -54,12 +48,7 @@ class EZVSL(nn.Module):
         aud = self.aud_proj(aud)
         aud = nn.functional.normalize(aud, dim=1)
 
-        # Compute loss
-        loss, logits = self.max_xmil_loss(img, aud)
+        #aud_emb_proj = self.aud_emb_proj(aud_embedding)
+        #aud_emb_proj = nn.functional.normalize(aud_emb_proj, dim=1)
 
-        # Compute avl maps
-        with torch.no_grad():
-            B = img.shape[0]
-            Savl = logits[torch.arange(B), torch.arange(B)]
-
-        return loss, Savl
+        return img, aud
