@@ -1,108 +1,85 @@
-# Localizing Visual Sounds the Easy Way
+## Acoustic and Visual Knowledge Distillation for Contrastive Audio-Visual Localization
 
-Official codebase for EZ-VSL. 
-EZ-VSL is a simple yet effective approach for Visual Sound Localization.
-Please check out the paper for full details. 
-
-[**Localizing Visual Sounds the Easy Way**](https://arxiv.org/abs/2203.09324)<br>
-Shentong Mo, Pedro Morgado<br>
-arXiv 2022.
+[**check the paper**](https://dl.acm.org/doi/10.1145/3577190.3614144)<br>
 
 <div align="center">
-  <img width="100%" alt="EZ-VSL Illustration" src="images/framework.png">
+  <img width="100%" alt="Model overview" src="images/AVL_model.png">
 </div>
 
+### Setup the environment
 
-## Environment
-
-To setup the environment, please simply run
+After creating a virtual environment install the requirments.
 
 ```
 pip install -r requirements.txt
 ```
 
-## Datasets
+### Datasets 
 
-###  Flickr-SoundNet
+####  Flickr-SoundNet
 
 Data can be downloaded from [Learning to localize sound sources](https://github.com/ardasnck/learning_to_localize_sound_source)
 
-###  VGG-Sound Source
+####  VGG-Sound Source
 
 Data can be downloaded from [Localizing Visual Sounds the Hard Way](https://github.com/hche11/Localizing-Visual-Sounds-the-Hard-Way)
 
-###  VGG-SS Unheard & Heard Test Data 
+####  VGG-SS Unheard & Heard Test Data 
 
 Data can be downloaded from [Unheard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_unheard_test.csv) and [Heard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_heard_test.csv)
 
 
-## Model Zoo
+### Model 
 
 We release several models pre-trained with EZ-VSL with the hope that other researchers might also benefit from them.
 
-| Method |    Train Set   |     Test Set    |     CIoU     |  AUC  | url | Train | Test |
-|:------:|:--------------:|:---------------:|:------------:|:-----:|:---:|:----:|:----:| 
-| EZ-VSL |   Flickr 10k   | Flickr SoundNet |     81.93    | 62.58 | [model](https://drive.google.com/drive/folders/1I9nyn8VGU4HFEBDpEUpqFz1ywWcqzC6C?usp=sharing) | [script](./scripts/train_flickr10k.sh)    | [script](./scripts/test_flickr_with_flickr10k.sh)    |
-| EZ-VSL |   Flickr 144k  | Flickr SoundNet |     83.13    | 63.06 | [model](https://drive.google.com/drive/folders/1I9nyn8VGU4HFEBDpEUpqFz1ywWcqzC6C?usp=sharing) | [script](./scripts/train_flickr144k.sh)   | [script](./scripts/test_flickr_with_flickr144k.sh)   |
-| EZ-VSL | VGG-Sound 144k | Flickr SoundNet |     83.94    | 63.60 | [model](https://drive.google.com/drive/folders/1I9nyn8VGU4HFEBDpEUpqFz1ywWcqzC6C?usp=sharing) | [script](./scripts/train_vggsound144k.sh) | [script](./scripts/test_flickr_with_vggsound144k.sh) |
-| EZ-VSL |  VGG-Sound 10k |      VGG-SS     |     37.18    | 38.75 | [model](https://drive.google.com/drive/folders/1I9nyn8VGU4HFEBDpEUpqFz1ywWcqzC6C?usp=sharing) | [script](./scripts/train_vggsound10k.sh)  | [script](./scripts/test_vggss_with_vggsound10k.sh)   |
-| EZ-VSL | VGG-Sound 144k |      VGG-SS     |     38.85    | 39.54 | [model](https://drive.google.com/drive/folders/1I9nyn8VGU4HFEBDpEUpqFz1ywWcqzC6C?usp=sharing) | [script](./scripts/train_vggsound144k.sh) | [script](./scripts/test_vggss_with_vggsound144k.sh)  |
-| EZ-VSL | VGG-Sound Full |      VGG-SS     |     39.34    | 39.78 | [model](https://drive.google.com/drive/folders/1I9nyn8VGU4HFEBDpEUpqFz1ywWcqzC6C?usp=sharing) | [script](./scripts/train_vggsoundfull.sh) | [script](./scripts/test_vggss_with_vggsoundfull.sh)  |
-| EZ-VSL |    Heard 110   |    Heard 110    |     37.25    | 38.97 | [model](https://drive.google.com/drive/folders/1I9nyn8VGU4HFEBDpEUpqFz1ywWcqzC6C?usp=sharing) | [script](./scripts/train_heard110.sh)     | [script](./scripts/test_heard_with_heard110.sh)      |
-| EZ-VSL |    Heard 110   |   Unheard 110   |     39.57    | 39.60 | [model](https://drive.google.com/drive/folders/1I9nyn8VGU4HFEBDpEUpqFz1ywWcqzC6C?usp=sharing) | [script](./scripts/train_heard110.sh)     | [script](./scripts/test_unheard_with_heard110.sh)    |
+| Method |    Train Set   |    url   |
+|:------:|:--------------:|:---------|
+|  AVC   | VGG-Sound 144k | [model](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EXKkjdlDSmdFtsEyD01DQpYBvIrNcdbr2_Nd_TF_1CHHfA?e=5MtuLm) |
 
+### Train
+1- Download the datasets 
+2- Use create_datalist.py to randomly select 144k samples and create a list of samples to be used for training
+3- Extract objects and audio features using DETR and PANN to be used in the [loss function](https://github.com/Ehsan-Yaghoubi/Acoustic-and-Visual-Knowledge-Distillation-for-Contrastive-Audio-Visual-Localization/blob/5aaf8b51448464caa1e2daa0f7ba1b567e52a9e8/train_N_times.py#L277)  
 
-## Train & Test
-
-For training an EZ-VSL model, please run
-
+### Test on Flicker dataset
 ```
-python train.py --multiprocessing_distributed \
-    --train_data_path /path/to/Flickr-all/ \
-    --test_data_path /path/to/Flickr-SoundNet/ \
-    --test_gt_path /path/to/Flickr-SoundNet/Annotations/ \
-    --experiment_name flickr_10k \
-    --trainset 'flickr_10k' \
-    --testset 'flickr' \
-    --epochs 100 \
-    --batch_size 128 \
-    --init_lr 0.0001
-```
-
-For testing and visualization, simply run
-
-```
-python test.py --test_data_path /path/to/Flickr-SoundNet/ \
+python test_N_times.py --test_data_path /path/to/Flickr-SoundNet/ \
     --test_gt_path /path/to/Flickr-SoundNet/Annotations/ \
     --model_dir checkpoints \
-    --experiment_name flickr_10k \
+    --experiment_name vggsound_144k \
     --save_visualizations \
     --testset 'flickr' \
     --alpha 0.4
 ```
 
-The training script supports the following training sets: `flickr`, `flickr_10k`, `flickr_144k`, `vggss`, `vggss_10k`, `vggss_144k` or `vggss_heard`.
-
-For evaluation, it supports the following test sets: `flickr`, `vggss`, `vggss_heard`, `vggss_unheard`.
-
-## Visualizations
-
-The `test.py` script saves the predicted localization maps for all test images when the flag `--save_visualizations` is provided.
-All visualizations for OGL, AVL and EZ-VSL localization maps are saved under `{model_dir}/{experiment_name}/viz/`.
-Here's some examples.
+### Visualizations
+The code has the option to save the visualizations. 
 <div align="center">
-  <img width="100%" alt="Visualizations" src="images/visualization.png">
+  <img width="100%" alt="Visualizations" src="images/qualitative_results_2.png">
 </div>
 
-## Citation
+### Citation
 
 If you find this repository useful, please cite our paper:
 ```
-@article{mo2022EZVSL,
-  title={Localizing Visual Sounds the Easy Way},
-  author={Mo, Shentong and Morgado, Pedro},
-  journal={arXiv preprint arXiv:2203.09324},
-  year={2022}
+@inproceedings{10.1145/3577190.3614144,
+author = {Yaghoubi, Ehsan and Kelm, Andre Peter and Gerkmann, Timo and Frintrop, Simone},
+title = {Acoustic and Visual Knowledge Distillation for Contrastive Audio-Visual Localization},
+year = {2023},
+isbn = {9798400700552},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3577190.3614144},
+doi = {10.1145/3577190.3614144},
+abstract = {This paper introduces an unsupervised model for audio-visual localization, which aims to identify regions in the visual data that produce sounds. Our key technical contribution is to demonstrate that using distilled prior knowledge of both sounds and objects in an unsupervised learning phase can improve performance significantly. We propose an Audio-Visual Correspondence (AVC) model consisting of an audio and a vision student, which are respectively supervised by an audio teacher (audio recognition model) and a vision teacher (object detection model). Leveraging a contrastive learning approach, the AVC student model extracts features from sounds and images and computes a localization map, discovering the regions of the visual data that correspond to the sound signal. Simultaneously, the teacher models provide feature-based hints from their last layers to supervise the AVC model in the training phase. In the test phase, the teachers are removed. Our extensive experiments show that the proposed model outperforms the state-of-the-art audio-visual localization models on 10k and 144k subsets of the Flickr and VGGS datasets, including cross-dataset validation.},
+booktitle = {Proceedings of the 25th International Conference on Multimodal Interaction},
+pages = {15–23},
+numpages = {9},
+keywords = {Audio-visual representation learning, Knowledge distillation, acoustic-visual learning., cross-modal learning, multi-modal teacher-student, sound-image localization},
+location = {<conf-loc>, <city>Paris</city>, <country>France</country>, </conf-loc>},
+series = {ICMI '23}
 }
 ```
+
 
