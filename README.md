@@ -14,16 +14,16 @@ pip install -r requirements.txt
 ```
 
 #### Model: 
-|    Method   |    Train Set   |    url   |
-|:-----------:|:--------------:|:---------|
-|  AVC-144k   | VGG-Sound 144k | [model](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EXKkjdlDSmdFtsEyD01DQpYBvIrNcdbr2_Nd_TF_1CHHfA?e=5MtuLm) |
+|    Method   |    Train Set   |     Download link    |
+|:-----------:|:--------------:|:---------------------|
+|  AVC-144k   | VGG-Sound 144k | [checkpoints (2.5 GB)](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EXKkjdlDSmdFtsEyD01DQpYBvIrNcdbr2_Nd_TF_1CHHfA?e=5MtuLm) |
   
 #### Test sets (1 frame + 10s audio):
-[Flickr-5k (4GB)](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EcvhlIYJJbFKhyzx3zoy-vwBlYwikiV5BUCjKznbMPOUOQ?e=nibS1U) 
+[Flickr-5k (4 GB)](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EcvhlIYJJbFKhyzx3zoy-vwBlYwikiV5BUCjKznbMPOUOQ?e=nibS1U) 
 
-[VGG-SS (5.6GB)](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EavcYYDVKoRAgIC8Tq1NmbABLUBlsg3KbOHjw6AqOXl9FA?e=2LGGSj)
+[VGG-SS (5.6 GB)](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EavcYYDVKoRAgIC8Tq1NmbABLUBlsg3KbOHjw6AqOXl9FA?e=2LGGSj)
 
-#### Test on Flicker dataset:
+#### Test on Flickr dataset:
 ```
 python test_N_times.py --test_data_path /path/to/Flickr-SoundNet/ \
     --test_gt_path /path/to/Flickr-SoundNet/Annotations/ \
