@@ -10,7 +10,7 @@ from torch import multiprocessing as mp
 import torch.distributed as dist
 
 import utils
-from model import EZVSL
+from model_cnn import EZVSL
 from datasets import get_train_dataset, get_test_dataset
 import random
 from statistics import mean, stdev
@@ -18,14 +18,17 @@ from statistics import mean, stdev
 def get_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_dir', type=str, default='./checkpoints', help='path to save trained model weights')
-    parser.add_argument('--experiment_name', type=str, default='flickr_10k_10_seed_run3', help='experiment name (used for checkpointing and logging)')
+    parser.add_argument('--experiment_name', type=str, default='vggsound_10k_for_robot', help='experiment name (used for checkpointing and logging)')
 
     # Data params
-    parser.add_argument('--trainset', default='flickr_10k_random', type=str, help='trainset (flickr or vggss)')
-    parser.add_argument('--testset', default='flickr', type=str, help='testset,(flickr or vggss)')
-    parser.add_argument('--train_data_path', default='/data2/datasets/small_subset_flicker/10k_flicker', type=str, help='Root directory path of train data')
-    parser.add_argument('--test_data_path', default='/data2/datasets/labeled_5k_flicker/Data/', type=str, help='Root directory path of test data')
-    parser.add_argument('--test_gt_path', default='/data2/datasets/labeled_5k_flicker/Annotations/', type=str)
+    parser.add_argument('--trainset', default='vggsound_10k_random', type=str, help='trainset (flickr or vggss)')
+    parser.add_argument('--testset', default='vggss', type=str, help='testset,(flickr or vggss)')
+    parser.add_argument('--train_data_path', default='/data2/dataset/vggsound/', type=str, help='Root directory path of train data')
+    #parser.add_argument('--test_data_path', default='/data2/dataset/vggss/vggss_labeled/', type=str, help='Root directory path of test data')
+    #parser.add_argument('--test_gt_path', default='/data2/dataset/vggss/vggss_labeled/', type=str)
+    #parser.add_argument('--train_data_path', default='/data2/dataset/small_subset_flicker/10k_flicker', type=str, help='Root directory path of train data')
+    parser.add_argument('--test_data_path', default='/data2/dataset/labeled_5k_flicker/Data/', type=str, help='Root directory path of test data')
+    parser.add_argument('--test_gt_path', default='/data2/dataset/labeled_5k_flicker/Annotations/', type=str)
 
     # ez-vsl hyper-params
     parser.add_argument('--out_dim', default=512, type=int)
@@ -33,13 +36,13 @@ def get_arguments():
 
     # training/evaluation parameters
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs")
-    parser.add_argument('--batch_size', default=128, type=int, help='Batch Size')
+    parser.add_argument('--batch_size', default=32, type=int, help='Batch Size')
     parser.add_argument("--init_lr", type=float, default=0.0001, help="initial learning rate")
     parser.add_argument("--seed", type=list, default=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100], help="random seed")
 
     # Distributed params
     parser.add_argument('--workers', type=int, default=8)
-    parser.add_argument('--gpu', type=int, default='0')
+    parser.add_argument('--gpu', type=int, default="0")
     parser.add_argument('--world_size', type=int, default=1)
     parser.add_argument('--rank', type=int, default=0)
     parser.add_argument('--node', type=str, default='localhost')
@@ -84,13 +87,20 @@ def main(args):
             args.world_size = ngpus_per_node
             mp.spawn(main_worker,
                      nprocs=ngpus_per_node,
-                     args=(ngpus_per_node, args))
+                     args=(ngpus_per_node, args, seed_num))
+            file_path = os.path.join(args.model_dir, args.experiment_name, "best_results_{}.txt".format(seed_num))
+            with open(file_path, "r") as f:
+                contents = f.read()
+            best_cIoU = float(contents.split(":")[1].split()[0])
+            best_Auc = float(contents.split(":")[2].split()[0])
 
+            best_cIoU_all.append(best_cIoU)
+            best_Auc_all.append(best_Auc)
         else:
-            best_cIoU, best_Auc = main_worker(seed_num, args.gpu, ngpus_per_node, args)
+            best_cIoU, best_Auc = main_worker(args.gpu, ngpus_per_node, args, seed_num)
 
-        best_cIoU_all.append(best_cIoU)
-        best_Auc_all.append(best_Auc)
+            best_cIoU_all.append(best_cIoU)
+            best_Auc_all.append(best_Auc)
 
     mean_cIoU = mean(best_cIoU_all)
     stdev_cIoU = stdev(best_cIoU_all)
@@ -101,7 +111,7 @@ def main(args):
     print("Note: Use the test_N_times.py for getting the evaluation results, when we use the AV_model alongside object detectors explicitly")
 
 
-def main_worker(train_round, gpu, ngpus_per_node, args):
+def main_worker(gpu, ngpus_per_node, args, train_round):
     args.gpu = gpu
 
     # suppress printing if not first GPU on each node
@@ -214,7 +224,10 @@ def main_worker(train_round, gpu, ngpus_per_node, args):
             best_cIoU, best_Auc = cIoU, auc
             if args.rank == 0:
                 torch.save(ckp, os.path.join(model_dir, 'best_{}.pth'.format(train_round)))
-
+    #write best cior and auc to a file
+    with open(os.path.join(model_dir, "best_results_{}.txt".format(train_round)), "w") as f:
+        f.write("best_cIoU: {} \n".format(best_cIoU))
+        f.write("best_Auc: {}".format(best_Auc))
     return best_cIoU, best_Auc
 
 def max_xmil_loss(img, aud):

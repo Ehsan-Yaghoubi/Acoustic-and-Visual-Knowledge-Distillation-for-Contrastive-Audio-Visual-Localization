@@ -67,9 +67,9 @@ def load_all_bboxes(annotation_dir, format='flickr'):
             annotations = json.load(json_file)
         for annotation in annotations:
             bboxes = [(np.clip(np.array(bbox), 0, 1) * 224).astype(int) for bbox in annotation['bbox']]
-            gt_bboxes[annotation['file']] = bboxes
+            gt_bboxes[annotation['file']] = [list(bboxes[0])]
             dert_bboxes = [(np.clip(np.array(dert_bbox), 0, 1) * 800).astype(int) for dert_bbox in annotation['bbox']]
-            gt_bboxes_dert[annotation['file']] = dert_bboxes
+            gt_bboxes_dert[annotation['file']] = [list(dert_bboxes[0])]
 
     return gt_bboxes, gt_bboxes_dert
 
@@ -138,9 +138,11 @@ class AudioVisualDatasetTest(Dataset):
         bboxes = {}
         bboxes_detr = {}
         if self.all_bboxes is not None:
-            bboxes['bboxes'], bboxes_detr['bboxes'] = self.all_bboxes[file_id], self.all_bboxes_detr[file_id]
-            bboxes['gt_map'], bboxes_detr['gt_map'] = bbox2gtmap(self.all_bboxes[file_id], self.all_bboxes_detr[file_id], self.bbox_format)
-
+            try:
+                bboxes['bboxes'], bboxes_detr['bboxes'] = self.all_bboxes[file_id], self.all_bboxes_detr[file_id]
+                bboxes['gt_map'], bboxes_detr['gt_map'] = bbox2gtmap(self.all_bboxes[file_id], self.all_bboxes_detr[file_id], self.bbox_format)
+            except KeyError as e:
+                print("for id file {}, no valid information is found.".format(file_id), e)
         return frame, detr_frame, spectrogram, bboxes, bboxes_detr, file_id
 
     def __len__(self):
@@ -194,7 +196,16 @@ class AudioVisualDatasetTrain(Dataset):
 
         # Audio
         audio_fn = os.path.join(self.audio_path, self.audio_files[idx])
-        spectrogram = self.audio_transform(load_spectrogram(audio_fn))
+        for i in range(11):
+            spectrogram = self.audio_transform(load_spectrogram(audio_fn))
+            if spectrogram.size() == (1, 257, 554):
+                break
+            else:
+                print("the audio file with id {} has a spectrogram with size {}, which is different with the requested size that is (1, 257, 554).".format(file_id, spectrogram.size()))
+                n_repeat = int(554/int(spectrogram.size()[-1])) + 1
+                spectrogram = torch.tile(spectrogram, (1, 1, n_repeat))[:, :, :554]
+                print("new size: ", spectrogram.shape)
+
 
         aud_feat_path = os.path.join(self.audio_feat_path, self.audio_feats[idx])
         f_conv_detr_path = os.path.join(self.detr_conv_feats_path, self.detr_conv_feats[idx])
@@ -238,11 +249,11 @@ def get_train_dataset(args):
     audio_files, audio_path = check_available_samples(args.train_data_path, 'audio')
     image_files, image_path = check_available_samples(args.train_data_path, 'frames')
     audio_feats, audio_feat_path = check_available_samples(args.train_data_path, 'audio_feats')
-    detr_conv_feats, detr_conv_feats_path = check_available_samples(args.train_data_path, 'detr_conv_feats')
+    #detr_conv_feats, detr_conv_feats_path = check_available_samples(args.train_data_path, 'detr_conv_feats')
     detr_dec_feats, detr_dec_feats_path = check_available_samples(args.train_data_path, 'detr_dec_feats')
-    detr_enc_feats, detr_enc_feats_path = check_available_samples(args.train_data_path, 'detr_enc_feats')
+    #detr_enc_feats, detr_enc_feats_path = check_available_samples(args.train_data_path, 'detr_enc_feats')
     # check available samples
-    avail_files = audio_files.intersection(image_files).intersection(audio_feats).intersection(detr_conv_feats).intersection(detr_dec_feats).intersection(detr_enc_feats)
+    avail_files = audio_files.intersection(image_files).intersection(audio_feats).intersection(detr_dec_feats)
     print(f"{len(avail_files)} available samples")
     assert len(avail_files) != 0
 
@@ -275,8 +286,10 @@ def get_train_dataset(args):
 
     trans = transforms.Compose([transforms.ToTensor()])
 
-    files = [image_files, audio_files, audio_feats, detr_conv_feats, detr_dec_feats, detr_enc_feats]
-    paths = [image_path, audio_path, audio_feat_path, detr_conv_feats_path, detr_dec_feats_path, detr_enc_feats_path]
+    #files = [image_files, audio_files, audio_feats, detr_conv_feats, detr_dec_feats, detr_enc_feats]
+    #paths = [image_path, audio_path, audio_feat_path, detr_conv_feats_path, detr_dec_feats_path, detr_enc_feats_path]
+    files = [image_files, audio_files, audio_feats, detr_dec_feats, detr_dec_feats, detr_dec_feats]
+    paths = [image_path, audio_path, audio_feat_path, detr_dec_feats_path, detr_dec_feats_path, detr_dec_feats_path]
 
     return AudioVisualDatasetTrain(paths, files, audio_dur=3., image_transform=image_transform, audio_transform=audio_transform)
 
@@ -305,14 +318,24 @@ def get_test_dataset(args):
     assert len(testset) > 0
 
     # Intersect with available files
-    audio_files = {fn.split('.wav')[0] for fn in os.listdir(audio_path)}
-    image_files = {fn.split('.jpg')[0] for fn in os.listdir(image_path)}
-    avail_files = audio_files.intersection(image_files)
-    testset = testset.intersection(avail_files)
-    assert len(testset) > 0
-    testset = sorted(list(testset))
-    image_files = [dt+'.jpg' for dt in testset]
-    audio_files = [dt+'.wav' for dt in testset]
+    if bbox_format=="vggss":
+        audio_files = {fn.split('.flac')[0] for fn in os.listdir(audio_path)}
+        image_files = {fn.split('.jpg')[0] for fn in os.listdir(image_path)}
+        avail_files = audio_files.intersection(image_files)
+        #testset = testset.intersection(avail_files)
+        assert len(avail_files) > 0
+        print("number of available files for test: ", len(avail_files))
+        image_files = [dt + '.jpg' for dt in avail_files]
+        audio_files = [dt + '.flac' for dt in avail_files]
+    else:
+        audio_files = {fn.split('.wav')[0] for fn in os.listdir(audio_path)}
+        image_files = {fn.split('.jpg')[0] for fn in os.listdir(image_path)}
+        avail_files = audio_files.intersection(image_files)
+        testset = testset.intersection(avail_files)
+        assert len(testset) > 0
+        testset = sorted(list(testset))
+        image_files = [dt+'.jpg' for dt in testset]
+        audio_files = [dt+'.wav' for dt in testset]
     assert len(image_files) > 0
     assert len(audio_files) > 0
     # Bounding boxes

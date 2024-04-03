@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 import utils
 import numpy as np
 import argparse
-from model import EZVSL
+from model_cnn import EZVSL
 from datasets import get_test_dataset, inverse_normalize
 import cv2
 import random
@@ -15,13 +15,16 @@ from statistics import mean, stdev
 def get_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_dir', type=str, default='./checkpoints', help='path to save trained model weights')
-    parser.add_argument('--experiment_name', type=str, default='flickr_10k_10_seed_run3', help='experiment name (experiment folder set to "args.model_dir/args.experiment_name)"')
+    parser.add_argument('--experiment_name', type=str, default='vggsound_144k_run1', help='experiment name (experiment folder set to "args.model_dir/args.experiment_name)"')
     parser.add_argument('--save_visualizations', action='store_false', help='Set to store all VSL visualizations (saved in viz directory within experiment folder)')
 
     # Dataset
-    parser.add_argument('--testset', default='flickr', type=str, help='testset (flickr or vggss)')
-    parser.add_argument('--test_data_path', default='/data2/datasets/labeled_5k_flicker/Data/', type=str, help='Root directory path of data')
-    parser.add_argument('--test_gt_path', default='/data2/datasets/labeled_5k_flicker/Annotations/', type=str)
+    #parser.add_argument('--testset', default='flickr', type=str, help='testset (flickr or vggss)')
+    #parser.add_argument('--test_data_path', default='/data2/dataset/labeled_5k_flicker/Data/', type=str, help='Root directory path of data')
+    #parser.add_argument('--test_gt_path', default='/data2/dataset/labeled_5k_flicker/Annotations/', type=str)
+    parser.add_argument('--testset', default='vggss', type=str, help='testset (flickr or vggss)')
+    parser.add_argument('--test_data_path', default='/data2/dataset/vggss/vggss_dataset_different_naming/', type=str, help='Root directory path of data')
+    parser.add_argument('--test_gt_path', default='/data2/dataset/vggss/', type=str)
     parser.add_argument('--batch_size', default=1, type=int, help='Batch Size')
 
     # Model
@@ -30,7 +33,7 @@ def get_arguments():
     parser.add_argument('--alpha', default=0.4, type=float, help='alpha')
 
     # Distributed params
-    parser.add_argument('--workers', type=int, default=8)
+    parser.add_argument('--workers', type=int, default=12)
     parser.add_argument('--gpu', type=int, default=None)
     parser.add_argument('--world_size', type=int, default=1)
     parser.add_argument('--rank', type=int, default=0)
@@ -142,8 +145,12 @@ def main(args):
 
     mean_AV_mAP = mean(AV_best_mAP_all)
     stdev_AV_mAP = stdev(AV_best_mAP_all)
-    mean_AV_cIoU = mean(AV_best_cIoU_all)
-    stdev_AV_cIoU = stdev(AV_best_cIoU_all)
+    try:
+        mean_AV_cIoU = mean(AV_best_cIoU_all)
+        stdev_AV_cIoU = stdev(AV_best_cIoU_all)
+    except ValueError as e:
+        print(e)
+        mean_AV_cIoU, stdev_AV_cIoU = 0, 0
     mean_AV_auc = mean(AV_best_Auc_all)
     stdev_AV_auc = stdev(AV_best_Auc_all)
     print(">>>>>> AV model: mAP_averaged for {} runs is: {}±{}".format(len(args.seed), mean_AV_mAP, stdev_AV_mAP))
@@ -152,8 +159,12 @@ def main(args):
 
     mean_res_mAP = mean(Resnet18_best_mAP_all)
     stdev_res_mAP = stdev(Resnet18_best_mAP_all)
-    mean_res_cIoU = mean(Resnet18_best_cIoU_all)
-    stdev_res_cIoU = stdev(Resnet18_best_cIoU_all)
+    try:
+        mean_res_cIoU = mean(Resnet18_best_cIoU_all)
+        stdev_res_cIoU = stdev(Resnet18_best_cIoU_all)
+    except ValueError as e:
+        print(e)
+        mean_res_cIoU, stdev_res_cIoU = 0, 0
     mean_res_auc = mean(Resnet18_best_Auc_all)
     stdev_res_auc = stdev(Resnet18_best_Auc_all)
     print(">>>>>> resnet18 model: mAP_averaged for {} runs is: {}±{}".format(len(args.seed), mean_res_mAP, stdev_res_mAP))
@@ -162,18 +173,26 @@ def main(args):
 
     mean_detr_mAP = mean(detr_best_mAP_all)
     stdev_detr_mAP = stdev(detr_best_mAP_all)
-    mean_detr_cIoU = mean(detr_best_cIoU_all)
-    stdev_detr_cIoU = stdev(detr_best_cIoU_all)
     mean_detr_auc = mean(detr_best_Auc_all)
     stdev_detr_auc = stdev(detr_best_Auc_all)
+    try:
+        mean_detr_cIoU = mean(detr_best_cIoU_all)
+        stdev_detr_cIoU = stdev(detr_best_cIoU_all)
+    except ValueError as e:
+        print(e)
+        mean_detr_cIoU, stdev_detr_cIoU = 0, 0
     print(">>>>>> detr model: mAP_averaged for {} runs is: {}±{}".format(len(args.seed), mean_detr_mAP, stdev_detr_mAP))
     print(">>>>>> detr model: cIoU_averaged for {} runs is: {}±{}".format(len(args.seed), mean_detr_cIoU, stdev_detr_cIoU))
     print(">>>>>> detr model: Auc_averaged for {} runs is: {}±{}".format(len(args.seed), mean_detr_auc, stdev_detr_auc))
 
     mean_AVO_mAP = mean(AVO_best_mAP_all)
     stdev_AVO_mAP = stdev(AVO_best_mAP_all)
-    mean_AVO_cIoU = mean(AVO_best_cIoU_all)
-    stdev_AVO_cIoU = stdev(AVO_best_cIoU_all)
+    try:
+        mean_AVO_cIoU = mean(AVO_best_cIoU_all)
+        stdev_AVO_cIoU = stdev(AVO_best_cIoU_all)
+    except ValueError as e:
+        print(e)
+        mean_AVO_cIoU, stdev_AVO_cIoU = 0, 0
     mean_AVO_auc = mean(AVO_best_Auc_all)
     stdev_AVO_auc = stdev(AVO_best_Auc_all)
     print(">>>>>> AV+obj model: mAP_averaged for {} runs is: {}±{}".format(len(args.seed), mean_AVO_mAP, stdev_AVO_mAP))
@@ -198,6 +217,23 @@ def validate(testdataloader, audio_visual_model, object_saliency_model, detr_mod
             image = image.cuda(args.gpu, non_blocking=True)
             detr_image = detr_image.cuda(args.gpu, non_blocking=True)
 
+        measure_complexity = False
+        if measure_complexity:
+            from thop import profile
+            #audio_visual model
+            flops, params = profile(audio_visual_model, inputs=(image.float(),spec.float()))
+            print(f"FLOPs of audio_visual_model: {flops/1000000000}")
+            print(f"params of audio_visual_model: {params/1000000}")
+            #Resnet18 OG model
+            flops, params = profile(object_saliency_model, inputs=(image,))
+            print(f"FLOPs of Resnet18 OG model: {flops/1000000000}")
+            print(f"params Resnet18 OG model: {params/1000000}")
+            #detr OG model
+            flops, params = profile(detr_model, inputs=(detr_image,))
+            print(f"FLOPs of detr model: {flops/1000000000}")
+            print(f"params detr model: {params/1000000}")
+
+
         # Compute S_AVL
         img_f, aud_f = audio_visual_model(image.float(), spec.float())
         with torch.no_grad():
@@ -207,6 +243,7 @@ def validate(testdataloader, audio_visual_model, object_saliency_model, detr_mod
 
         heatmap_av = F.interpolate(heatmap_av, size=(224, 224), mode='bilinear', align_corners=True)
         heatmap_av = heatmap_av.data.cpu().numpy()
+
 
         # Compute S_OBJ
         img_feat = object_saliency_model(image)
@@ -227,55 +264,60 @@ def validate(testdataloader, audio_visual_model, object_saliency_model, detr_mod
             pred_obj = utils.normalize_img(heatmap_obj[i, 0])
             pred_detr_224 = utils.normalize_img(detr_heatmap_224[i, 0])
             pred_detr_800 = utils.normalize_img(detr_heatmap_800[i, 0])
-            pred_av_obj = utils.normalize_img(pred_av/3 + pred_obj/3 + pred_detr_224/3)
+            if args.testset == "flickr":
+                pred_av_obj = utils.normalize_img(pred_av/3 + pred_obj/3 + pred_detr_224/3)
+            if args.testset == "vggss":
+                pred_av_obj = utils.normalize_img(pred_av + args.alpha * pred_obj)
 
-            gt_map_224 = bboxes['gt_map'].data.cpu().numpy()
-            gt_map_800 = bboxes_detr['gt_map'].data.cpu().numpy()
+            try:
+                gt_map_224 = bboxes['gt_map'].data.cpu().numpy()
+                gt_map_800 = bboxes_detr['gt_map'].data.cpu().numpy()
 
-            thr_av = np.sort(pred_av.flatten())[int(pred_av.shape[0] * pred_av.shape[1] * 0.5)]
-            evaluator_av.cal_CIOU(pred_av, gt_map_224, (224, 224), thr_av)
+                thr_av = np.sort(pred_av.flatten())[int(pred_av.shape[0] * pred_av.shape[1] * 0.5)]
+                evaluator_av.cal_CIOU(pred_av, gt_map_224, (224, 224), thr_av)
 
-            thr_obj = np.sort(pred_obj.flatten())[int(pred_obj.shape[0] * pred_obj.shape[1] * 0.5)]
-            evaluator_obj.cal_CIOU(pred_obj, gt_map_224, (224, 224), thr_obj)
+                thr_obj = np.sort(pred_obj.flatten())[int(pred_obj.shape[0] * pred_obj.shape[1] * 0.5)]
+                evaluator_obj.cal_CIOU(pred_obj, gt_map_224, (224, 224), thr_obj)
 
-            thr_detr_224 = np.sort(pred_detr_224.flatten())[int(pred_detr_224.shape[0] * pred_detr_224.shape[1] * 0.5)]
-            evaluator_detr_224.cal_CIOU(pred_detr_224, gt_map_224, (224, 224), thr_detr_224)
-            thr_detr_800 = np.sort(pred_detr_800.flatten())[int(pred_detr_800.shape[0] * pred_detr_800.shape[1] * 0.5)]
-            evaluator_detr_800.cal_CIOU(pred_detr_800, gt_map_800, (800, 800), thr_detr_800)
+                thr_detr_224 = np.sort(pred_detr_224.flatten())[int(pred_detr_224.shape[0] * pred_detr_224.shape[1] * 0.5)]
+                evaluator_detr_224.cal_CIOU(pred_detr_224, gt_map_224, (224, 224), thr_detr_224)
+                thr_detr_800 = np.sort(pred_detr_800.flatten())[int(pred_detr_800.shape[0] * pred_detr_800.shape[1] * 0.5)]
+                evaluator_detr_800.cal_CIOU(pred_detr_800, gt_map_800, (800, 800), thr_detr_800)
 
-            thr_av_obj = np.sort(pred_av_obj.flatten())[int(pred_av_obj.shape[0] * pred_av_obj.shape[1] * 0.5)]
-            evaluator_av_obj.cal_CIOU(pred_av_obj, gt_map_224, (224, 224), thr_av_obj)
+                thr_av_obj = np.sort(pred_av_obj.flatten())[int(pred_av_obj.shape[0] * pred_av_obj.shape[1] * 0.5)]
+                evaluator_av_obj.cal_CIOU(pred_av_obj, gt_map_224, (224, 224), thr_av_obj)
 
-            if args.save_visualizations:
-                denorm_image = inverse_normalize(image).squeeze(0).permute(1, 2, 0).cpu().numpy()[:, :, ::-1]
-                denorm_image = (denorm_image*255).astype(np.uint8)
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_image.jpg'), denorm_image)
+                if args.save_visualizations:
+                    denorm_image = inverse_normalize(image).squeeze(0).permute(1, 2, 0).cpu().numpy()[:, :, ::-1]
+                    denorm_image = (denorm_image*255).astype(np.uint8)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_image.jpg'), denorm_image)
 
-                # visualize bboxes on raw images
-                gt_boxes_img = utils.visualize(denorm_image, bboxes['bboxes'])
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_gt_boxes.jpg'), gt_boxes_img)
+                    # visualize bboxes on raw images
+                    gt_boxes_img = utils.visualize(denorm_image, bboxes['bboxes'])
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_gt_boxes.jpg'), gt_boxes_img)
 
-                # visualize heatmaps
-                heatmap_img = np.uint8(pred_av*255)
-                heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
-                fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_av.jpg'), fin)
+                    # visualize heatmaps
+                    heatmap_img = np.uint8(pred_av*255)
+                    heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
+                    fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_av.jpg'), fin)
 
-                heatmap_img = np.uint8(pred_obj*255)
-                heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
-                fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_obj.jpg'), fin)
+                    heatmap_img = np.uint8(pred_obj*255)
+                    heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
+                    fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_obj.jpg'), fin)
 
-                heatmap_img_detr_800 = np.uint8(pred_detr_800 * 255)
-                heatmap_img_detr_800 = cv2.applyColorMap(heatmap_img_detr_800[:, :, np.newaxis], cv2.COLORMAP_JET)
-                fin_detr_800 = cv2.addWeighted(heatmap_img_detr_800, 0.8, np.uint8(heatmap_img_detr_800), 0.2, 0)
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_detr_800.jpg'), fin_detr_800)
+                    heatmap_img_detr_800 = np.uint8(pred_detr_800 * 255)
+                    heatmap_img_detr_800 = cv2.applyColorMap(heatmap_img_detr_800[:, :, np.newaxis], cv2.COLORMAP_JET)
+                    fin_detr_800 = cv2.addWeighted(heatmap_img_detr_800, 0.8, np.uint8(heatmap_img_detr_800), 0.2, 0)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_detr_800.jpg'), fin_detr_800)
 
-                heatmap_img = np.uint8(pred_av_obj*255)
-                heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
-                fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_av_obj.jpg'), fin)
-
+                    heatmap_img = np.uint8(pred_av_obj*255)
+                    heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
+                    fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_av_obj.jpg'), fin)
+            except KeyError as e:
+                print("ground truth bboxes for sample {} is not found.". format(name), e, bboxes)
         print(f'{step+1}/{len(testdataloader)}: '
               f'map_av={evaluator_av.finalize_AP50():.2f} '
               f'map_obj={evaluator_obj.finalize_AP50():.2f} '

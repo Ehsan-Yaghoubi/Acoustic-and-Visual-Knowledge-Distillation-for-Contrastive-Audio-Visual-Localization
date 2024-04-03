@@ -18,9 +18,12 @@ def get_arguments():
     parser.add_argument('--save_visualizations', action='store_true', help='Set to store all VSL visualizations (saved in viz directory within experiment folder)')
 
     # Dataset
-    parser.add_argument('--testset', default='flickr', type=str, help='testset (flickr or vggss)')
-    parser.add_argument('--test_data_path', default='/data2/datasets/labeled_5k_flicker/Data/', type=str, help='Root directory path of data')
-    parser.add_argument('--test_gt_path', default='/data2/datasets/labeled_5k_flicker/Annotations/', type=str)
+    #parser.add_argument('--testset', default='flickr', type=str, help='testset (flickr or vggss)')
+    #parser.add_argument('--test_data_path', default='/data2/datasets/labeled_5k_flicker/Data/', type=str, help='Root directory path of data')
+    #parser.add_argument('--test_gt_path', default='/data2/datasets/labeled_5k_flicker/Annotations/', type=str)
+    parser.add_argument('--testset', default='vggss', type=str, help='testset (flickr or vggss)')
+    parser.add_argument('--test_data_path', default='/data2/datasets/vggss/vggss_labeled/', type=str, help='Root directory path of data')
+    parser.add_argument('--test_gt_path', default='/data2/datasets/vggss/vggss_labeled/', type=str)
     parser.add_argument('--batch_size', default=1, type=int, help='Batch Size')
 
     # Model
@@ -81,11 +84,11 @@ def main(args):
             object_saliency_model = torch.nn.parallel.DistributedDataParallel(object_saliency_model, device_ids=[args.gpu])
 
     # Load weights
-    ckp_fn = os.path.join(model_dir, 'best.pth')
+    ckp_fn = os.path.join(model_dir, 'checkpoints/vggsound_144k/official_best.pth')
     if os.path.exists(ckp_fn):
         ckp = torch.load(ckp_fn, map_location='cpu')
         audio_visual_model.load_state_dict({k.replace('module.', ''): ckp['model'][k] for k in ckp['model']})
-        print(f'loaded from {os.path.join(model_dir, "best.pth")}')
+        print(f'loaded from {os.path.join(model_dir, "checkpoints/vggsound_144k/official_best.pth")}')
     else:
         print(f"Checkpoint not found: {ckp_fn}")
 
@@ -121,6 +124,7 @@ def validate(testdataloader, audio_visual_model, object_saliency_model, detr_mod
             heatmap_av = Savl.unsqueeze(1)
 
         heatmap_av = F.interpolate(heatmap_av, size=(224, 224), mode='bilinear', align_corners=True)
+
         heatmap_av = heatmap_av.data.cpu().numpy()
 
         # Compute S_OBJ
@@ -144,53 +148,55 @@ def validate(testdataloader, audio_visual_model, object_saliency_model, detr_mod
             pred_detr_800 = utils.normalize_img(detr_heatmap_800[i, 0])
             pred_av_obj = utils.normalize_img(pred_av/3 + pred_obj/3 + pred_detr_224/3)
 
-            gt_map_224 = bboxes['gt_map'].data.cpu().numpy()
-            gt_map_800 = bboxes_detr['gt_map'].data.cpu().numpy()
+            try:
+                gt_map_224 = bboxes['gt_map'].data.cpu().numpy()
+                gt_map_800 = bboxes_detr['gt_map'].data.cpu().numpy()
 
-            thr_av = np.sort(pred_av.flatten())[int(pred_av.shape[0] * pred_av.shape[1] * 0.5)]
-            evaluator_av.cal_CIOU(pred_av, gt_map_224, (224, 224), thr_av)
+                thr_av = np.sort(pred_av.flatten())[int(pred_av.shape[0] * pred_av.shape[1] * 0.5)]
+                evaluator_av.cal_CIOU(pred_av, gt_map_224, (224, 224), thr_av)
 
-            thr_obj = np.sort(pred_obj.flatten())[int(pred_obj.shape[0] * pred_obj.shape[1] * 0.5)]
-            evaluator_obj.cal_CIOU(pred_obj, gt_map_224, (224, 224), thr_obj)
+                thr_obj = np.sort(pred_obj.flatten())[int(pred_obj.shape[0] * pred_obj.shape[1] * 0.5)]
+                evaluator_obj.cal_CIOU(pred_obj, gt_map_224, (224, 224), thr_obj)
 
-            thr_detr_224 = np.sort(pred_detr_224.flatten())[int(pred_detr_224.shape[0] * pred_detr_224.shape[1] * 0.5)]
-            evaluator_detr_224.cal_CIOU(pred_detr_224, gt_map_224, (224, 224), thr_detr_224)
-            thr_detr_800 = np.sort(pred_detr_800.flatten())[int(pred_detr_800.shape[0] * pred_detr_800.shape[1] * 0.5)]
-            evaluator_detr_800.cal_CIOU(pred_detr_800, gt_map_800, (800, 800), thr_detr_800)
+                thr_detr_224 = np.sort(pred_detr_224.flatten())[int(pred_detr_224.shape[0] * pred_detr_224.shape[1] * 0.5)]
+                evaluator_detr_224.cal_CIOU(pred_detr_224, gt_map_224, (224, 224), thr_detr_224)
+                thr_detr_800 = np.sort(pred_detr_800.flatten())[int(pred_detr_800.shape[0] * pred_detr_800.shape[1] * 0.5)]
+                evaluator_detr_800.cal_CIOU(pred_detr_800, gt_map_800, (800, 800), thr_detr_800)
 
-            thr_av_obj = np.sort(pred_av_obj.flatten())[int(pred_av_obj.shape[0] * pred_av_obj.shape[1] * 0.5)]
-            evaluator_av_obj.cal_CIOU(pred_av_obj, gt_map_224, (224, 224), thr_av_obj)
+                thr_av_obj = np.sort(pred_av_obj.flatten())[int(pred_av_obj.shape[0] * pred_av_obj.shape[1] * 0.5)]
+                evaluator_av_obj.cal_CIOU(pred_av_obj, gt_map_224, (224, 224), thr_av_obj)
 
-            if args.save_visualizations:
-                denorm_image = inverse_normalize(image).squeeze(0).permute(1, 2, 0).cpu().numpy()[:, :, ::-1]
-                denorm_image = (denorm_image*255).astype(np.uint8)
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_image.jpg'), denorm_image)
+                if args.save_visualizations:
+                    denorm_image = inverse_normalize(image).squeeze(0).permute(1, 2, 0).cpu().numpy()[:, :, ::-1]
+                    denorm_image = (denorm_image*255).astype(np.uint8)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_image.jpg'), denorm_image)
 
-                # visualize bboxes on raw images
-                gt_boxes_img = utils.visualize(denorm_image, bboxes['bboxes'])
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_gt_boxes.jpg'), gt_boxes_img)
+                    # visualize bboxes on raw images
+                    gt_boxes_img = utils.visualize(denorm_image, bboxes['bboxes'])
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_gt_boxes.jpg'), gt_boxes_img)
 
-                # visualize heatmaps
-                heatmap_img = np.uint8(pred_av*255)
-                heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
-                fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_av.jpg'), fin)
+                    # visualize heatmaps
+                    heatmap_img = np.uint8(pred_av*255)
+                    heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
+                    fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_av.jpg'), fin)
 
-                heatmap_img = np.uint8(pred_obj*255)
-                heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
-                fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_obj.jpg'), fin)
+                    heatmap_img = np.uint8(pred_obj*255)
+                    heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
+                    fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_obj.jpg'), fin)
 
-                heatmap_img_detr_800 = np.uint8(pred_detr_800 * 255)
-                heatmap_img_detr_800 = cv2.applyColorMap(heatmap_img_detr_800[:, :, np.newaxis], cv2.COLORMAP_JET)
-                fin_detr_800 = cv2.addWeighted(heatmap_img_detr_800, 0.8, np.uint8(heatmap_img_detr_800), 0.2, 0)
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_detr_800.jpg'), fin_detr_800)
+                    heatmap_img_detr_800 = np.uint8(pred_detr_800 * 255)
+                    heatmap_img_detr_800 = cv2.applyColorMap(heatmap_img_detr_800[:, :, np.newaxis], cv2.COLORMAP_JET)
+                    fin_detr_800 = cv2.addWeighted(heatmap_img_detr_800, 0.8, np.uint8(heatmap_img_detr_800), 0.2, 0)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_detr_800.jpg'), fin_detr_800)
 
-                heatmap_img = np.uint8(pred_av_obj*255)
-                heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
-                fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
-                cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_av_obj.jpg'), fin)
-
+                    heatmap_img = np.uint8(pred_av_obj*255)
+                    heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
+                    fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_av_obj.jpg'), fin)
+            except KeyError as e:
+                print(e, bboxes)
         print(f'{step+1}/{len(testdataloader)}: '
               f'map_av={evaluator_av.finalize_AP50():.2f} '
               f'map_obj={evaluator_obj.finalize_AP50():.2f} '

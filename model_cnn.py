@@ -44,8 +44,8 @@ class EZVSL(nn.Module):
         img = nn.functional.normalize(img, dim=1)
 
         # Audio
-        aud = self.audnet(audio)
-        aud = self.aud_proj(aud)
+        aud = self.audnet(audio) #in(N,1,257,276) out(N,512)
+        aud = self.aud_proj(aud) #in#(N,512) out(N,2048)
         aud = nn.functional.normalize(aud, dim=1)
 
         #aud_emb_proj = self.aud_emb_proj(aud_embedding)
