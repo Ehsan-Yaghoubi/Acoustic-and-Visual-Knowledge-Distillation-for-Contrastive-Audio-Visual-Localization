@@ -36,11 +36,7 @@ We release several models pre-trained with EZ-VSL with the hope that other resea
 | Method |    Train Set   |    url   |
 |:------:|:--------------:|:---------|
 |  AVC   | VGG-Sound 144k | [model](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EXKkjdlDSmdFtsEyD01DQpYBvIrNcdbr2_Nd_TF_1CHHfA?e=5MtuLm) |
-
-### Train
-1- Download the datasets 
-2- Use create_datalist.py to randomly select 144k samples and create a list of samples to be used for training
-3- Extract objects and audio features using DETR and PANN to be used in the [loss function](https://github.com/Ehsan-Yaghoubi/Acoustic-and-Visual-Knowledge-Distillation-for-Contrastive-Audio-Visual-Localization/blob/5aaf8b51448464caa1e2daa0f7ba1b567e52a9e8/train_N_times.py#L277)  
+  
 
 ### Test on Flicker dataset
 ```
