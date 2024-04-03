@@ -31,7 +31,6 @@ python test_N_times.py --test_data_path /path/to/Flickr-SoundNet/ \
     --experiment_name vggsound_144k \
     --save_visualizations \
     --testset 'flickr' \
-    --alpha 0.4
 ```
 
 #### Visualizations:

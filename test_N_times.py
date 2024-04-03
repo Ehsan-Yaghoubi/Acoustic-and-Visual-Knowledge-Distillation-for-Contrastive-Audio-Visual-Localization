@@ -300,22 +300,22 @@ def validate(testdataloader, audio_visual_model, object_saliency_model, detr_mod
                     heatmap_img = np.uint8(pred_av*255)
                     heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
                     fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
-                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_av.jpg'), fin)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_AVC.jpg'), fin)
 
                     heatmap_img = np.uint8(pred_obj*255)
                     heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
                     fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
-                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_obj.jpg'), fin)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_OG.jpg'), fin)
 
                     heatmap_img_detr_800 = np.uint8(pred_detr_800 * 255)
                     heatmap_img_detr_800 = cv2.applyColorMap(heatmap_img_detr_800[:, :, np.newaxis], cv2.COLORMAP_JET)
                     fin_detr_800 = cv2.addWeighted(heatmap_img_detr_800, 0.8, np.uint8(heatmap_img_detr_800), 0.2, 0)
-                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_detr_800.jpg'), fin_detr_800)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_DETR.jpg'), fin_detr_800)
 
                     heatmap_img = np.uint8(pred_av_obj*255)
                     heatmap_img = cv2.applyColorMap(heatmap_img[:, :, np.newaxis], cv2.COLORMAP_JET)
                     fin = cv2.addWeighted(heatmap_img, 0.8, np.uint8(denorm_image), 0.2, 0)
-                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_pred_av_obj.jpg'), fin)
+                    cv2.imwrite(os.path.join(viz_dir, f'{name[i]}_OG_AVC_DETR.jpg'), fin)
             except KeyError as e:
                 print("ground truth bboxes for sample {} is not found.". format(name), e, bboxes)
         print(f'{step+1}/{len(testdataloader)}: '
