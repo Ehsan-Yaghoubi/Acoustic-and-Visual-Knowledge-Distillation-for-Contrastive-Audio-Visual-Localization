@@ -1,6 +1,8 @@
 ## Acoustic and Visual Knowledge Distillation for Contrastive Audio-Visual Localization
 
-[**check the paper**](https://dl.acm.org/doi/10.1145/3577190.3614144)<br>
+[**Check the paper**](https://dl.acm.org/doi/10.1145/3577190.3614144)<br>
+
+[**Download**](https://github.com/Ehsan-Yaghoubi/Acoustic-and-Visual-Knowledge-Distillation-for-Contrastive-Audio-Visual-Localization/blob/main/images/Acoustic%20and%20Visual%20Knowledge%20Distillation%20for%20Contrastive%20Audio-Visual%20Localization.pdf)
 
 <div align="center">
   <img width="100%" alt="Model overview" src="images/AVL_model.png">
