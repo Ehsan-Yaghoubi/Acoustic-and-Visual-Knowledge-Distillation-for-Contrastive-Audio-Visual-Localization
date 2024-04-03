@@ -21,16 +21,28 @@ pip install -r requirements.txt
 #### Test sets (1 frame + 10s audio):
 [Flickr-5k (4 GB)](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EcvhlIYJJbFKhyzx3zoy-vwBlYwikiV5BUCjKznbMPOUOQ?e=nibS1U) 
 
-[VGG-SS (5.6 GB)](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EavcYYDVKoRAgIC8Tq1NmbABLUBlsg3KbOHjw6AqOXl9FA?e=2LGGSj)
+[VGG-SS (5.6 GB)](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EdmasH3Kv8VAuMy3KZRv0mgBj9z86PBPs2U3Lco-XyDmuw)
 
-#### Test on Flickr dataset:
+#### Test on Flickr:
 ```
-python test_N_times.py --test_data_path /path/to/Flickr-SoundNet/ \
-    --test_gt_path /path/to/Flickr-SoundNet/Annotations/ \
+python test_N_times.py \
+    --testset flickr \
+    --test_data_path /data2/dataset/labeled_5k_flicker/Data/ \
+    --test_gt_path /data2/dataset/labeled_5k_flicker/Annotations/ \
     --model_dir checkpoints \
-    --experiment_name vggsound_144k \
-    --save_visualizations \
-    --testset 'flickr' \
+    --experiment_name test_run1 \
+
+```
+
+#### Test on vggss:
+```
+python test_N_times.py \
+    --testset vggss \
+    --test_data_path /data2/dataset/vggss/vggss_dataset_different_naming/ \
+    --test_gt_path /data2/dataset/vggss/ \
+    --model_dir checkpoints \
+    --experiment_name test_run1 \
+
 ```
 
 #### Visualizations:
