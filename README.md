@@ -6,25 +6,23 @@
   <img width="100%" alt="Model overview" src="images/AVL_model.png">
 </div>
 
-### Setup the environment
+#### Setup the environment
 After creating a virtual environment install the requirments.
 
 ```
 pip install -r requirements.txt
 ```
 
-### Datasets 
-**Flickr-SoundNet** [Learning to localize sound sources](https://github.com/ardasnck/learning_to_localize_sound_source) | **VGG-Sound Source** [Localizing Visual Sounds the Hard Way](https://github.com/hche11/Localizing-Visual-Sounds-the-Hard-Way) | **VGG-SS Unheard & Heard Test Data** [Unheard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_unheard_test.csv) and [Heard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_heard_test.csv)
-
-
-
-### Model 
+#### Model 
 |    Method   |    Train Set   |    url   |
 |:-----------:|:--------------:|:---------|
 |  AVC-144k   | VGG-Sound 144k | [model](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EXKkjdlDSmdFtsEyD01DQpYBvIrNcdbr2_Nd_TF_1CHHfA?e=5MtuLm) |
   
+#### Test sets (1 frame + 10s audio)
+[Flickr-5k (4GB)](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EcvhlIYJJbFKhyzx3zoy-vwBlYwikiV5BUCjKznbMPOUOQ?e=nibS1U) 
+[VGG-SS (5.6GB)](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EavcYYDVKoRAgIC8Tq1NmbABLUBlsg3KbOHjw6AqOXl9FA?e=2LGGSj)
 
-### Test on Flicker dataset
+#### Test on Flicker dataset
 ```
 python test_N_times.py --test_data_path /path/to/Flickr-SoundNet/ \
     --test_gt_path /path/to/Flickr-SoundNet/Annotations/ \
@@ -35,13 +33,13 @@ python test_N_times.py --test_data_path /path/to/Flickr-SoundNet/ \
     --alpha 0.4
 ```
 
-### Visualizations
+#### Visualizations
 The code has the option to save the visualizations. 
 <div align="center">
   <img width="100%" alt="Visualizations" src="images/qualitative_results_2.png">
 </div>
 
-### Citation
+#### Citation
 
 ```
 @inproceedings{10.1145/3577190.3614144,
