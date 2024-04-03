@@ -7,7 +7,6 @@
 </div>
 
 ### Setup the environment
-
 After creating a virtual environment install the requirments.
 
 ```
@@ -17,22 +16,16 @@ pip install -r requirements.txt
 ### Datasets 
 
 ####  Flickr-SoundNet
-
-Data can be downloaded from [Learning to localize sound sources](https://github.com/ardasnck/learning_to_localize_sound_source)
+[Learning to localize sound sources](https://github.com/ardasnck/learning_to_localize_sound_source)
 
 ####  VGG-Sound Source
-
-Data can be downloaded from [Localizing Visual Sounds the Hard Way](https://github.com/hche11/Localizing-Visual-Sounds-the-Hard-Way)
+[Localizing Visual Sounds the Hard Way](https://github.com/hche11/Localizing-Visual-Sounds-the-Hard-Way)
 
 ####  VGG-SS Unheard & Heard Test Data 
-
-Data can be downloaded from [Unheard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_unheard_test.csv) and [Heard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_heard_test.csv)
+[Unheard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_unheard_test.csv) and [Heard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_heard_test.csv)
 
 
 ### Model 
-
-We release several models pre-trained with EZ-VSL with the hope that other researchers might also benefit from them.
-
 | Method |    Train Set   |    url   |
 |:------:|:--------------:|:---------|
 |  AVC   | VGG-Sound 144k | [model](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EXKkjdlDSmdFtsEyD01DQpYBvIrNcdbr2_Nd_TF_1CHHfA?e=5MtuLm) |
@@ -57,7 +50,6 @@ The code has the option to save the visualizations.
 
 ### Citation
 
-If you find this repository useful, please cite our paper:
 ```
 @inproceedings{10.1145/3577190.3614144,
 author = {Yaghoubi, Ehsan and Kelm, Andre Peter and Gerkmann, Timo and Frintrop, Simone},
