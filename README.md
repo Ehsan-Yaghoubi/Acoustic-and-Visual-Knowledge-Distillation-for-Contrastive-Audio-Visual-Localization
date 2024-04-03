@@ -14,21 +14,14 @@ pip install -r requirements.txt
 ```
 
 ### Datasets 
+**Flickr-SoundNet** [Learning to localize sound sources](https://github.com/ardasnck/learning_to_localize_sound_source) | **VGG-Sound Source** [Localizing Visual Sounds the Hard Way](https://github.com/hche11/Localizing-Visual-Sounds-the-Hard-Way) | **VGG-SS Unheard & Heard Test Data** [Unheard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_unheard_test.csv) and [Heard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_heard_test.csv)
 
-####  Flickr-SoundNet
-[Learning to localize sound sources](https://github.com/ardasnck/learning_to_localize_sound_source)
-
-####  VGG-Sound Source
-[Localizing Visual Sounds the Hard Way](https://github.com/hche11/Localizing-Visual-Sounds-the-Hard-Way)
-
-####  VGG-SS Unheard & Heard Test Data 
-[Unheard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_unheard_test.csv) and [Heard](https://github.com/stoneMo/EZ-VSL/blob/main/metadata/vggss_heard_test.csv)
 
 
 ### Model 
-| Method |    Train Set   |    url   |
-|:------:|:--------------:|:---------|
-|  AVC   | VGG-Sound 144k | [model](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EXKkjdlDSmdFtsEyD01DQpYBvIrNcdbr2_Nd_TF_1CHHfA?e=5MtuLm) |
+|    Method   |    Train Set   |    url   |
+|:-----------:|:--------------:|:---------|
+|  AVC-144k   | VGG-Sound 144k | [model](https://ubipt-my.sharepoint.com/:u:/g/personal/ehsan_yaghoubi_ubi_pt/EXKkjdlDSmdFtsEyD01DQpYBvIrNcdbr2_Nd_TF_1CHHfA?e=5MtuLm) |
   
 
 ### Test on Flicker dataset
