@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torchvision.models import resnet18
+import timm
 
 
 class EZVSL(nn.Module):
@@ -9,46 +9,39 @@ class EZVSL(nn.Module):
         super(EZVSL, self).__init__()
         self.tau = tau
 
-        # Vision model
-        self.imgnet = resnet18(weights="ResNet18_Weights.DEFAULT")
-        self.imgnet.avgpool = nn.Identity()
-        self.imgnet.fc = nn.Identity()
-        self.img_proj = nn.Conv2d(512, 2048, kernel_size=(1, 1))
+        # Vision model (ViT)
+        self.imgnet = timm.create_model('vit_base_patch16_224', pretrained=True)
+        self.img_proj = nn.Conv2d(768, 2048, kernel_size=(1, 1))
 
-        # Audio model
-        self.audnet = resnet18()
-        self.audnet.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.audnet.avgpool = nn.AdaptiveMaxPool2d((1, 1))
-        self.audnet.fc = nn.Identity()
-        self.aud_proj = nn.Linear(512, 2048)
+        # Audio model (ViT)
+        self.aud_initial = nn.Conv2d(1, 3, kernel_size=3, stride=1, padding=1)
+        self.aud_proj_1 = nn.Conv2d(3, 3, kernel_size=1, stride=1, padding=0)
+        self.audnet = timm.create_model('vit_base_patch16_224', pretrained=True)
+        self.avgpool = nn.AdaptiveMaxPool2d((1, 1))
+        self.aud_proj_2 = nn.Linear(self.audnet.num_features, 2048)
 
-        #self.aud_emb_proj = nn.Linear(2048, dim)
+        # Initialize weights
+        self._init_weights()
 
-        # Initialize weights (except pretrained visual model)
-        for net in [self.audnet, self.img_proj, self.aud_proj]:
-            for m in net.modules():
-                if isinstance(m, nn.Conv2d):
-                    nn.init.kaiming_normal_(
-                        m.weight, mode='fan_out', nonlinearity='relu')
-                elif isinstance(m, nn.Linear):
-                    nn.init.trunc_normal_(
-                        m.weight, mean=0.0, std=0.01)
-                elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-                    nn.init.normal_(m.weight, mean=1, std=0.02)
-                    nn.init.constant_(m.bias, 0)
+    def _init_weights(self):
+        for net in [self.img_proj, self.aud_proj_1, self.aud_proj_2]:
+            nn.init.trunc_normal_(net.weight, mean=0.0, std=0.01)
+            nn.init.zeros_(net.bias)
 
     def forward(self, image, audio):
         # Image
-        img = self.imgnet(image).unflatten(1, (512, 7, 7))
+        img = self.imgnet.forward_features(image)
+        img = img.transpose(1, 2)[:, :, 1:].view(1, 768, 14, 14)
         img = self.img_proj(img)
-        img = nn.functional.normalize(img, dim=1)
+        img = F.normalize(img, dim=1)
 
         # Audio
-        aud = self.audnet(audio)
-        aud = self.aud_proj(aud)
-        aud = nn.functional.normalize(aud, dim=1)
-
-        #aud_emb_proj = self.aud_emb_proj(aud_embedding)
-        #aud_emb_proj = nn.functional.normalize(aud_emb_proj, dim=1)
+        aud = self.aud_initial(audio)
+        aud = F.interpolate(aud, size=(224, 224), mode='bilinear', align_corners=False)
+        aud = self.aud_proj_1(aud)
+        aud = self.audnet.forward_features(aud)
+        aud = self.avgpool(aud)
+        aud = self.aud_proj_2(aud)
+        aud = F.normalize(aud, dim=1)
 
         return img, aud
